@@ -355,7 +355,7 @@ def get_user_order_list(orders, count, is_all=False):
             __dict['univalent'] = order_detail.univalent
             __dict['subtotal_money'] = order_detail.subtotal_money
             __dict['price_discount'] = order_detail.price_discount
-            __dict['delivery_time'] = order_detail.delivery_time
+            __dict['delivery_time'] = int(order_detail.delivery_time.timestamp())
             __dict['status'] = order_detail.status
             __dict['max_delivery_time'] = order_detail.max_delivery_time
             result.append(__dict)
@@ -579,7 +579,7 @@ def superuser_get_order_detail(orders, son_id=None):
     return data
 
 
-def deal_returns_order(order_details, returns_status, returns_sn, start_time='', end_time=''):
+def deal_returns_order(order_details, returns_status, returns_sn, start_time='', end_time='', is_type=1):
     data = []
     order_returns = OrderReturns.objects.filter(order_sn__in=[obj.son_order_sn for obj in order_details])
     if returns_sn:
@@ -613,7 +613,8 @@ def deal_returns_order(order_details, returns_status, returns_sn, start_time='',
         result['status'] = order_return.status
         result['add_time'] = order_return.add_time
         data.append(result)
-    response = APIResponse(success=True, data=data, msg='全部退货单')
+    msg = '全部退货单' if is_type == 1 else '全部退款单'
+    response = APIResponse(success=True, data=data, msg=msg)
     return response
 
 

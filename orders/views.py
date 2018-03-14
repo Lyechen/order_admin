@@ -1075,7 +1075,8 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
             order_details = filter_base(order_details, order_sn=order_sn, goods_name=goods_name, brand=brand)
             # if brand:
             #     order_details = order_details.filter(brand=brand)
-            response = deal_returns_order(order_details, returns_status, returns_sn, start_time, end_time)
+            response = deal_returns_order(order_details, returns_status, returns_sn, start_time, end_time,
+                                          is_type=is_type)
             return response
         order_details = OrderDetail.objects.filter(supplier_id=supplier_id, status__in=[3, 4, 5, 6, 8, 13])
         order_details = filter_base(order_details, order_sn=order_sn, goods_name=goods_name, brand=brand)
@@ -1105,7 +1106,7 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
         for order in orders:
             result = {}
             result['total_money'] = order.total_money
-            result['add_time'] = order.add_time
+            result['add_time'] = int(order.add_time.timestamp())
             result['order_sn'] = order.order_sn
             sub_order = []
             for order_detail in filter(lambda obj: obj.order == order.id, order_details):
@@ -1160,7 +1161,7 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
         for order in instance:
             result = {}
             result['total_money'] = order.total_money
-            result['add_time'] = order.add_time.date()
+            result['add_time'] = int(order.add_time.timestamp())
             # now = datetime.now()
             # delta = timedelta(days=7)
             # count_down = order.add_time + delta - now
@@ -1189,11 +1190,12 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
                 __dict['status'] = ORDER_STATUS[order_detail.status]
                 __dict['subtotal_money'] = order_detail.subtotal_money
                 __dict['goods_id'] = order_detail.goods_id
+                __dict['goods_name'] = '西门子马达'
                 __dict['model'] = order_detail.model
                 __dict['brand'] = order_detail.brand
                 __dict['commission'] = order_detail.commission
-                __dict['original_delivery_time'] = order_detail.add_time + timedelta(
-                    days=order_detail.max_delivery_time)
+                __dict['original_delivery_time'] = int((order_detail.add_time + timedelta(
+                    days=order_detail.max_delivery_time)).timestamp())
                 # 开票
                 _open_receipt = []
                 for open_receipt in OpenReceipt.objects.filter(order_sn=order_detail.son_order_sn):
@@ -1202,10 +1204,14 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
                     _receipt['order_sn'] = open_receipt.order_sn
                     _receipt['images'] = CDN_HOST + open_receipt.images
                     _receipt['remarks'] = open_receipt.remarks
-                    _receipt['add_time'] = open_receipt.add_time
+                    _receipt['add_time'] = int(open_receipt.add_time.timestamp())
                     _open_receipt.append(_receipt)
                 __dict['open_receipt'] = _open_receipt
-                payment = OrderPayment.objects.filter(order_sn=order_detail.son_order_sn, pay_status=2)[0]
+                payment = OrderPayment.objects.filter(order_sn=order_detail.son_order_sn, pay_status=2)
+                if not payment:
+                    response = APIResponse(success=False, data={}, msg='请求有误')
+                    return response
+                payment = payment[0]
                 __dict['pay_type'] = PAY_TYPE[payment.pay_type]
                 __dict['pay_status'] = PAY_STATUS[payment.pay_status]
                 # 物流
@@ -1232,7 +1238,7 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
                     _['execution_detail'] = operation.execution_detail
                     _['progress'] = operation.progress
                     _['time_consuming'] = operation.time_consuming
-                    _['add_time'] = operation.add_time
+                    _['add_time'] = int(operation.add_time.timestamp())
                     _operations.append(_)
                 __dict['operations'] = _operations
                 sub_order.append(__dict)
