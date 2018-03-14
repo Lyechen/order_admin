@@ -1122,7 +1122,7 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
                 _result['goods_unit'] = order_detail.goods_id
                 _result['goods_id'] = order_detail.goods_id
                 # 商品名称
-                _result['goods_name'] = order_detail.goods_id
+                _result['goods_name'] = '西门子电机'
                 _result['model'] = order_detail.model
                 _result['brand'] = order_detail.brand
                 # 包邮类型 0 无需物流 1 买家承担运费 2 卖家承担运费
@@ -1336,6 +1336,7 @@ class OrderLogisticsViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, 
                 logger.info('ID生成器连接失败!!!')
                 response = APIResponse(success=False, data={}, msg='ID生成器连接失败!!!')
                 return response
+            logger.info(message='生成退货ID返回结果: %s' % response_dict)
             if response_dict['rescode'] != '10000':
                 response = APIResponse(success=False, data={}, msg='ID生成器出错!!!')
                 return response
@@ -1348,6 +1349,9 @@ class OrderLogisticsViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, 
             order_operation = OrderOperationRecord.objects.filter(order_sn=order_sn).order_by('-add_time')
             time_consuming = float(now.timestamp() - order_operation[0].add_time.timestamp())
             order_detail = OrderDetail.objects.get(son_order_sn=order_sn)
+            if order_detail.status != 11:
+                response = APIResponse(success=False, data={}, msg='当前状态不允许退货')
+                return response
             order = Order.objects.get(pk=order_detail.order)
             OrderReturns.objects.create(order_sn=order_sn, returns_sn=returns_sn, receiver=receiver, mobile=mobile,
                                         logistics_company=logistics_company, logistics_number=logistics_number,
