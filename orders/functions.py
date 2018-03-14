@@ -663,7 +663,7 @@ def supplier_confirm_order(order_sn):
         pass
         response = APIResponse(success=True, data={}, msg='供应商确认收货成功,生成退款单成功')
     else:
-        response = APIResponse(success=False, data={}, msg='确认收货操作传入的参数有误')
+        response = APIResponse(success=False, data={}, msg='确认收货操作传入的参数有误,或该订单当前状态不支持此操作')
     return response
 
 

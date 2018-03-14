@@ -1150,100 +1150,184 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
         return response
 
     def retrieve(self, request, *args, **kwargs):
+        data = {}
         instance = self.get_object()
         supplier_id = request.query_params.get('supplier_id', 0)
         if safe_int(supplier_id) != instance.supplier_id:
             response = APIResponse(success=False, data={}, msg='供应商ID错误')
             return response
-        _instance = [instance]
+        order_detail = instance
         instance = Order.objects.filter(id=instance.order)
-        data = []
-        for order in instance:
-            result = {}
-            result['total_money'] = order.total_money
-            result['add_time'] = int(order.add_time.timestamp())
+        if not instance:
+            response = APIResponse(success=False, data={})
+            return response
+        order = instance[0]
+        receipt = Receipt.objects.get(pk=order.receipt)
+        data['order_info'] = {
+            'receiver': order.receiver,
+            'mobile': order.mobile,
+            'address': order.address,
+            'remarks': order.remarks,
+            'son_order_sn': order_detail.son_order_sn,
+            'subtotal_money': order_detail.subtotal_money,
+            'supplier_id': order_detail.supplier_id,
+            'number': order_detail.number,
+            'univalent': order_detail.univalent,
+            'max_delivery_time': order_detail.max_delivery_time,
+            'status': order_detail.status,
+            'goods_id': order_detail.goods_id,
+            'goods_name': '西门子马达',
+            'model': order_detail.model,
+            'brand': order_detail.brand,
+            'commission': order_detail.commission,
+            'original_delivery_time': int((order_detail.add_time + timedelta(
+                days=order_detail.max_delivery_time)).timestamp()),
+            'add_time': int(order.add_time.timestamp())
+        }
+        data['receipt_info'] = {
+            'receipt_id': receipt.id,
+            'title': receipt.title,
+            'account': receipt.account,
+            'tax_number': receipt.tax_number,
+            'telephone': receipt.telephone,
+            'bank': receipt.bank,
+            'company_address': receipt.company_address,
+            'add_time': int(receipt.add_time.timestamp())
+        }
+        payment = OrderPayment.objects.filter(order_sn=order_detail.son_order_sn, pay_status=2)
+        if not payment:
+            response = APIResponse(success=False, data={}, msg='请求有误')
+            return response
+        payment = payment[0]
+        data['pay_info'] = {
+            'pay_type': payment.pay_type,
+            'pay_status': payment.pay_status,
+            'add_time': int(payment.add_time.timestamp())
+        }
+        _open_receipt = []
+        for open_receipt in OpenReceipt.objects.filter(order_sn=order_detail.son_order_sn):
+            _receipt = {}
+            _receipt['receipt_sn'] = open_receipt.receipt_sn
+            _receipt['order_sn'] = open_receipt.order_sn
+            _receipt['images'] = CDN_HOST + open_receipt.images
+            _receipt['remarks'] = open_receipt.remarks
+            _receipt['add_time'] = int(open_receipt.add_time.timestamp())
+            _open_receipt.append(_receipt)
+        data['open_receipt'] = _open_receipt
+
+        logistics = OrderLogistics.objects.filter(order_sn=order_detail.son_order_sn)
+        _logistics = []
+        for _log in logistics:
+            _ = {}
+            _['receiver'] = _log.receiver
+            _['mobile'] = _log.mobile
+            _['address'] = _log.address
+            _['logistics_type'] = _log.logistics_type
+            _['logistics_company'] = _log.logistics_company
+            _['date_of_delivery'] = _log.date_of_delivery
+            _['logistics_number'] = _log.logistics_number
+            _['add_time'] = int(_log.add_time.timestamp())
+            _logistics.append(_)
+        data['logistics'] = _logistics
+
+        order_operations = OrderOperationRecord.objects.filter(order_sn=order_detail.son_order_sn)
+        _operations = []
+        for operation in order_operations:
+            _ = {}
+            _['status'] = operation.status
+            _['operator'] = operation.operator
+            _['execution_detail'] = operation.execution_detail
+            _['progress'] = operation.progress
+            _['time_consuming'] = operation.time_consuming
+            _['add_time'] = int(operation.add_time.timestamp())
+            _operations.append(_)
+        data['operations'] = _operations
+        # for order in instance:
+        #     result = {}
+        #     result['total_money'] = order.total_money
+        #     result['add_time'] = int(order.add_time.timestamp())
             # now = datetime.now()
             # delta = timedelta(days=7)
             # count_down = order.add_time + delta - now
-            result['order_sn'] = order.order_sn
+            # result['order_sn'] = order.order_sn
             # result['count_down'] = count_down
-            result['receiver'] = order.receiver
-            result['mobile'] = order.mobile
-            result['address'] = order.address
-            result['remarks'] = order.remarks
-            receipt = Receipt.objects.get(pk=order.receipt)
-            result['receipt_id'] = receipt.id
-            result['title'] = receipt.title
-            result['account'] = receipt.account
-            result['tax_number'] = receipt.tax_number
-            result['telephone'] = receipt.telephone
-            result['bank'] = receipt.bank
-            result['company_address'] = receipt.company_address
-            sub_order = []
-            for order_detail in _instance:
-                __dict = {}
-                __dict['son_order_sn'] = order_detail.son_order_sn
-                __dict['supplier_id'] = order_detail.supplier_id
-                __dict['number'] = order_detail.number
-                __dict['univalent'] = order_detail.univalent
-                __dict['max_delivery_time'] = order_detail.max_delivery_time
-                __dict['status'] = ORDER_STATUS[order_detail.status]
-                __dict['subtotal_money'] = order_detail.subtotal_money
-                __dict['goods_id'] = order_detail.goods_id
-                __dict['goods_name'] = '西门子马达'
-                __dict['model'] = order_detail.model
-                __dict['brand'] = order_detail.brand
-                __dict['commission'] = order_detail.commission
-                __dict['original_delivery_time'] = int((order_detail.add_time + timedelta(
-                    days=order_detail.max_delivery_time)).timestamp())
+            # result['receiver'] = order.receiver
+            # result['mobile'] = order.mobile
+            # result['address'] = order.address
+            # result['remarks'] = order.remarks
+            # receipt = Receipt.objects.get(pk=order.receipt)
+            # result['receipt_id'] = receipt.id
+            # result['title'] = receipt.title
+            # result['account'] = receipt.account
+            # result['tax_number'] = receipt.tax_number
+            # result['telephone'] = receipt.telephone
+            # result['bank'] = receipt.bank
+            # result['company_address'] = receipt.company_address
+            # sub_order = []
+            # for order_detail in _instance:
+                # __dict = {}
+                # __dict['son_order_sn'] = order_detail.son_order_sn
+                # __dict['supplier_id'] = order_detail.supplier_id
+                # __dict['number'] = order_detail.number
+                # __dict['univalent'] = order_detail.univalent
+                # __dict['max_delivery_time'] = order_detail.max_delivery_time
+                # __dict['status'] = ORDER_STATUS[order_detail.status]
+                # __dict['subtotal_money'] = order_detail.subtotal_money
+                # __dict['goods_id'] = order_detail.goods_id
+                # __dict['goods_name'] = '西门子马达'
+                # __dict['model'] = order_detail.model
+                # __dict['brand'] = order_detail.brand
+                # __dict['commission'] = order_detail.commission
+                # __dict['original_delivery_time'] = int((order_detail.add_time + timedelta(
+                #     days=order_detail.max_delivery_time)).timestamp())
                 # 开票
-                _open_receipt = []
-                for open_receipt in OpenReceipt.objects.filter(order_sn=order_detail.son_order_sn):
-                    _receipt = {}
-                    _receipt['receipt_sn'] = open_receipt.receipt_sn
-                    _receipt['order_sn'] = open_receipt.order_sn
-                    _receipt['images'] = CDN_HOST + open_receipt.images
-                    _receipt['remarks'] = open_receipt.remarks
-                    _receipt['add_time'] = int(open_receipt.add_time.timestamp())
-                    _open_receipt.append(_receipt)
-                __dict['open_receipt'] = _open_receipt
-                payment = OrderPayment.objects.filter(order_sn=order_detail.son_order_sn, pay_status=2)
-                if not payment:
-                    response = APIResponse(success=False, data={}, msg='请求有误')
-                    return response
-                payment = payment[0]
-                __dict['pay_type'] = PAY_TYPE[payment.pay_type]
-                __dict['pay_status'] = PAY_STATUS[payment.pay_status]
+                # _open_receipt = []
+                # for open_receipt in OpenReceipt.objects.filter(order_sn=order_detail.son_order_sn):
+                #     _receipt = {}
+                #     _receipt['receipt_sn'] = open_receipt.receipt_sn
+                #     _receipt['order_sn'] = open_receipt.order_sn
+                #     _receipt['images'] = CDN_HOST + open_receipt.images
+                #     _receipt['remarks'] = open_receipt.remarks
+                #     _receipt['add_time'] = int(open_receipt.add_time.timestamp())
+                #     _open_receipt.append(_receipt)
+                # __dict['open_receipt'] = _open_receipt
+                # payment = OrderPayment.objects.filter(order_sn=order_detail.son_order_sn, pay_status=2)
+                # if not payment:
+                #     response = APIResponse(success=False, data={}, msg='请求有误')
+                #     return response
+                # payment = payment[0]
+                # __dict['pay_type'] = PAY_TYPE[payment.pay_type]
+                # __dict['pay_status'] = PAY_STATUS[payment.pay_status]
                 # 物流
-                logistics = OrderLogistics.objects.filter(order_sn=order_detail.son_order_sn)
-                _logistics = []
-                for _log in logistics:
-                    ___dict = {}
-                    ___dict['receiver'] = _log.receiver
-                    ___dict['mobile'] = _log.mobile
-                    ___dict['address'] = _log.address
-                    ___dict['logistics_type'] = _log.logistics_type
-                    ___dict['logistics_company'] = _log.logistics_company
-                    ___dict['date_of_delivery'] = _log.date_of_delivery
-                    ___dict['logistics_number'] = _log.logistics_number
-                    _logistics.append(___dict)
-                __dict['logistics'] = _logistics
+                # logistics = OrderLogistics.objects.filter(order_sn=order_detail.son_order_sn)
+                # _logistics = []
+                # for _log in logistics:
+                #     ___dict = {}
+                #     ___dict['receiver'] = _log.receiver
+                #     ___dict['mobile'] = _log.mobile
+                #     ___dict['address'] = _log.address
+                #     ___dict['logistics_type'] = _log.logistics_type
+                #     ___dict['logistics_company'] = _log.logistics_company
+                #     ___dict['date_of_delivery'] = _log.date_of_delivery
+                #     ___dict['logistics_number'] = _log.logistics_number
+                #     _logistics.append(___dict)
+                # __dict['logistics'] = _logistics
                 # 订单操作
-                order_operations = OrderOperationRecord.objects.filter(order_sn=order_detail.son_order_sn)
-                _operations = []
-                for operation in order_operations:
-                    _ = {}
-                    _['status'] = operation.status
-                    _['operator'] = operation.operator
-                    _['execution_detail'] = operation.execution_detail
-                    _['progress'] = operation.progress
-                    _['time_consuming'] = operation.time_consuming
-                    _['add_time'] = int(operation.add_time.timestamp())
-                    _operations.append(_)
-                __dict['operations'] = _operations
-                sub_order.append(__dict)
-            result['sub_order'] = sub_order
-            data.append(result)
+            #     order_operations = OrderOperationRecord.objects.filter(order_sn=order_detail.son_order_sn)
+            #     _operations = []
+            #     for operation in order_operations:
+            #         _ = {}
+            #         _['status'] = operation.status
+            #         _['operator'] = operation.operator
+            #         _['execution_detail'] = operation.execution_detail
+            #         _['progress'] = operation.progress
+            #         _['time_consuming'] = operation.time_consuming
+            #         _['add_time'] = int(operation.add_time.timestamp())
+            #         _operations.append(_)
+            #     __dict['operations'] = _operations
+            #     sub_order.append(__dict)
+            # result['sub_order'] = sub_order
+            # data.append(result)
         response = APIResponse(success=True, data=data, msg='供应商收到的订单')
         return response
 
@@ -1308,7 +1392,7 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
 
     def get_serializer_class(self):
         if self.action == 'update':
-            # 1: 接单  2: 无货  3: 延期
+            # 1: 无货  2: 延期
             abnormal_type = safe_int(self.request.data.get('abnormal_type'))
             if abnormal_type in [1, 2]:
                 return AbnormalOrderSerializer
