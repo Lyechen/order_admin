@@ -24,7 +24,7 @@ from utils.string_extension import safe_int, safe_float
 from utils.http import APIResponse, CONTENT_RANGE, CONTENT_TOTAL, get_limit
 from order_admin.settings import CDN_HOST
 from .functions import generation_order, get_mother_order_detail, get_son_order_detail, get_user_order_list
-from .functions import payment_order, get_chief_order, deal_supplier_operation, supplier_confirm_order
+from .functions import payment_order, get_chief_order, deal_supplier_operation, supplier_confirm_order, filter_base
 from .functions import superuser_get_order_detail, returns_order, deal_returns_order, user_confirm_order
 
 # Create your views here.
@@ -1055,7 +1055,7 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
         limit = safe_int(request.query_params.get('limit', 15))
         supplier_id = request.query_params.get('supplier_id', 0)
         order_sn = request.query_params.get('order_sn', '')
-        goods_id = request.query_params.get('goods_id', '')
+        goods_name = request.query_params.get('goods_name', '')
         order_status = request.query_params.get('order_status', '')
         brand = request.query_params.get('brand', '')
         start_time = request.query_params.get('start_time', '')
@@ -1065,7 +1065,6 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
         if is_type:
             returns_sn = request.query_params.get('returns_sn', '')
             returns_status = safe_int(request.query_params.get('returns_status', 0))
-            brand = request.query_params.get('brand', '')
             order_details = OrderDetail.objects.filter(supplier_id=supplier_id, status__in=[10, 11, 14, 15])
             if is_type == 1:
                 order_details = order_details.filter(status__in=[11, 15])
@@ -1073,23 +1072,25 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
                 order_details = order_details.filter(status__in=[10, 14])
             if order_sn:
                 order_details = order_details.filter(son_order_sn=order_sn)
-            if brand:
-                order_details = order_details.filter(brand=brand)
-            response = deal_returns_order(order_details, returns_status, returns_sn)
+            order_details = filter_base(order_details, order_sn=order_sn, goods_name=goods_name, brand=brand)
+            # if brand:
+            #     order_details = order_details.filter(brand=brand)
+            response = deal_returns_order(order_details, returns_status, returns_sn, start_time, end_time)
             return response
         order_details = OrderDetail.objects.filter(supplier_id=supplier_id, status__in=[3, 4, 5, 6, 8, 13])
-        if order_sn:
-            if order_sn.endswith('000000'):
-                order = Order.objects.get(order_sn=order_sn)
-                order_details = order_details.filter(order=order.id)
-            else:
-                order_details = order_details.filter(son_order_sn=order_sn)
-        if goods_id:
-            order_details = order_details.filter(goods_id=goods_id)
+        order_details = filter_base(order_details, order_sn=order_sn, goods_name=goods_name, brand=brand)
+        # if order_sn:
+        #     if order_sn.endswith('000000'):
+        #         order = Order.objects.get(order_sn=order_sn)
+        #         order_details = order_details.filter(order=order.id)
+        #     else:
+        #         order_details = order_details.filter(son_order_sn=order_sn)
+        # if goods_name:
+        #     order_details = order_details.filter(goods_name=goods_name)
         if order_status:
             order_details = order_details.filter(status=order_status)
-        if brand:
-            order_details = order_details.filter(brand=brand)
+        # if brand:
+        #     order_details = order_details.filter(brand=brand)
         if start_time:
             start_time += ' 23:59:59'
             order_details = order_details.filter(add_time__gte=start_time)
@@ -1335,6 +1336,9 @@ class OrderLogisticsViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, 
                 logger.info('ID生成器连接失败!!!')
                 response = APIResponse(success=False, data={}, msg='ID生成器连接失败!!!')
                 return response
+            if response_dict['rescode'] != '10000':
+                response = APIResponse(success=False, data={}, msg='ID生成器出错!!!')
+                return response
             returns_sn = response_dict['data']['th_order_id']
             receiver = serializer.data['receiver']
             mobile = serializer.data['mobile']
@@ -1372,7 +1376,7 @@ class OrderLogisticsViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, 
         return response
 
     def get_serializer_class(self):
-        is_type = self.request.query_params.get('is_type', 0)
+        is_type = safe_int(self.request.query_params.get('is_type', 0))
         if self.action == 'create':
             if is_type == 1:
                 return ReturnOrderSerializer

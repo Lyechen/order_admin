@@ -579,13 +579,19 @@ def superuser_get_order_detail(orders, son_id=None):
     return data
 
 
-def deal_returns_order(order_details, returns_status, returns_sn):
+def deal_returns_order(order_details, returns_status, returns_sn, start_time='', end_time=''):
     data = []
     order_returns = OrderReturns.objects.filter(order_sn__in=[obj.son_order_sn for obj in order_details])
     if returns_sn:
         order_returns = order_returns.filter(returns_sn=returns_sn)
     if returns_status:
         order_returns = order_returns.filter(status=returns_status)
+    if start_time:
+        start_time += ' 23:59:59'
+        order_returns = order_returns.filter(add_time__gte=start_time)
+    if end_time:
+        end_time += ' 23:59:59'
+        order_returns = order_returns.filter(add_time__lte=end_time)
     for order_return in order_returns:
         result = {}
         order_detail = order_details.filter(son_order_sn=order_return.order_sn)
@@ -677,3 +683,18 @@ def user_confirm_order(instance, guest_id):
     instance.save()
     response = APIResponse(success=True, data={}, msg='确认收货操作成功')
     return response
+
+
+def filter_base(order_details, order_sn='', goods_name='', brand='', start_time='', end_time=''):
+    if order_sn:
+        if order_sn.endswith('000000'):
+            order = Order.objects.get(order_sn=order_sn)
+            order_details = order_details.filter(order=order.id)
+        else:
+            order_details = order_details.filter(son_order_sn=order_sn)
+    if goods_name:
+        order_details = order_details.filter(goods_name=goods_name)
+
+    if brand:
+        order_details = order_details.filter(brand=brand)
+    return order_details
