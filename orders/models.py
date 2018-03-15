@@ -254,6 +254,7 @@ class OrderLogistics(models.Model):
     """订单物流表"""
     order_sn = models.CharField(max_length=17, verbose_name='订单号', help_text='订单号')
     receiver = models.CharField(max_length=30, verbose_name='收货人', help_text='收货人')
+    sender = models.CharField(max_length=30, verbose_name='送货人', help_text='送货人', default='')
     mobile = models.CharField(max_length=11, verbose_name='联系电话', help_text='联系电话')
     address = models.CharField(max_length=200, verbose_name='收货地址', help_text='收货地址')
     logistics_type = models.IntegerField(choices=LOGISTICS_TYPE, default=1, verbose_name='物流方式', help_text='物流方式')
@@ -261,7 +262,7 @@ class OrderLogistics(models.Model):
                                          help_text='物流公司')
     logistics_number = models.CharField(default='', null=True, blank=True, max_length=50, verbose_name='物流编号',
                                         help_text='物流编号')
-    date_of_delivery = models.DateField(null=True, blank=True, verbose_name='发货日', help_text='发货日')
+    date_of_delivery = models.DateField(null=True, blank=True, verbose_name='最大发货日', help_text='最大发货日')
     add_time = models.DateTimeField(default=timezone.now, verbose_name='添加时间')
 
     class Meta:

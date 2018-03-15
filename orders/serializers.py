@@ -3,6 +3,7 @@ __author__ = 'jiangchao'
 import re
 import requests
 from rest_framework import serializers
+from datetime import timedelta
 
 from .models import Receipt, Order, OrderOperationRecord, OrderDetail, OrderPayment, OrderCancel, OrderLogistics
 from .models import OpenReceipt, AbnormalOrder, OrderReturns
@@ -28,7 +29,7 @@ class ReceiptSerializer(serializers.ModelSerializer):
 
 
 class OpenReceiptSerializer(serializers.ModelSerializer):
-    images = serializers.CharField(label='URL')
+    images = serializers.CharField(label='URL', allow_null=True, allow_blank=True)
 
     class Meta:
         model = OpenReceipt
@@ -43,7 +44,7 @@ class OpenReceiptSerializer(serializers.ModelSerializer):
         images = re.sub(pattern, '', images)
         if re.match(r'^/.*', images):
             attrs['images'] = images
-        else:
+        elif images:
             attrs['images'] = '/' + images
         order_detail = OrderDetail.objects.filter(son_order_sn=order_sn)
         if not order_detail:
@@ -150,7 +151,6 @@ class ReturnsSerializer(serializers.ModelSerializer):
 
 
 class ReturnOrderSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = OrderReturns
         fields = ['order_sn', 'receiver', 'mobile', 'address', 'logistics_company', 'logistics_number']
@@ -194,21 +194,30 @@ class SupplierOrderAdminSerializer(serializers.ModelSerializer):
 
 
 class OrderLogisticsSerializer(serializers.ModelSerializer):
-    logistics_company = serializers.CharField(allow_blank=True, label='物流公司')
-    logistics_number = serializers.CharField(allow_blank=True, label='物流编号')
+    order_sn = serializers.CharField(max_length=17, label='订单号', required=True)
+    logistics_company = serializers.CharField(label='物流公司')
+    logistics_number = serializers.CharField(label='物流编号')
+    mobile = serializers.CharField(max_length=11, min_length=11, label='电话', allow_null=True, allow_blank=True)
+    sender = serializers.CharField(max_length=30, label='送货人', allow_null=True, allow_blank=True)
 
     class Meta:
         model = OrderLogistics
-        fields = ['order_sn', 'receiver', 'mobile', 'address', 'logistics_type', 'logistics_company',
-                  'date_of_delivery', 'logistics_number']
+        fields = ['order_sn', 'mobile', 'logistics_company', 'logistics_number', 'sender']
 
     def validate(self, attrs):
         """后续验证逻辑可能需要修改"""
         order_sn = attrs['order_sn']
         order_detail = OrderDetail.objects.filter(son_order_sn=order_sn, status__in=[4, 11])
         if not order_detail:
-            logger.info('订单号[%s]有误或当前状态不是待接单' % order_sn)
-            raise serializers.ValidationError('订单号[%s]有误或当前状态不是待接单' % order_sn)
+            logger.info('订单号[%s]有误或当前状态不是待发货' % order_sn)
+            raise serializers.ValidationError('订单号[%s]有误或当前状态不是待发货' % order_sn)
+        order = Order.objects.get(pk=order_detail[0].order)
+        attrs['receiver'] = order.receiver
+        attrs['mobile'] = order.mobile if not attrs.get('mobile', '') else attrs['mobile']
+        attrs['address'] = order.province + order.city + order.district + order.address
+        attrs['logistics_type'] = 2
+        attrs['date_of_delivery'] = (order.add_time + timedelta(
+            days=order_detail[0].max_delivery_time)).date()
         return attrs
 
 

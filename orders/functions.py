@@ -125,26 +125,13 @@ def online_generation_order(data):
     due_time = date + delta
     try:
         data = json.loads(data)
-        # 发票信息
-        if data['receipt_type'] == 3:
-            receipt = Receipt.objects.create(receipt_type=data['receipt_type'])
-        else:
-            receipt = Receipt.objects.create(
-                title=data['title'],
-                account=data['account'],
-                tax_number=data['tax_number'],
-                telephone=data['telephone'],
-                bank=data['bank'],
-                company_address=data['company_address'],
-                receipt_type=data['receipt_type'],
-            )
         # 商品信息
         goods_info = data['goods_info']
         goods_id_list = []
         number_list = []
         for info in goods_info:
-            goods_id_list.append(info['goods_id'])
-            number_list.append(info['number'])
+            goods_id_list.append(int(info['goods_id']))
+            number_list.append(int(info['number']))
         # 收货人
         receiver = data['receiver']
         # 电话
@@ -172,9 +159,9 @@ def online_generation_order(data):
             return response
         # 获取商品信息
         try:
-            parameters = json.dumps({'goods_ids': goods_id_list, 'quantities': number_list})
-            goods_response = requests.get(GOODS_API_HOST + '/api/service/checkout/goods', data=parameters, headers=headers)
-            goods_dict = json.loads(response.text)
+            parameters = {'goods_ids': [1, 2, 3], 'quantities': [10, 10, 10]}
+            goods_response = requests.get(GOODS_API_HOST + '/api/service/checkout/goods', parameters, headers=headers)
+            goods_dict = json.loads(goods_response.text)
         except Exception as e:
             logger.info('ID生成器连接失败!!!')
             response = APIResponse(success=False, data={}, msg='ID生成器连接失败!!!')
@@ -183,19 +170,28 @@ def online_generation_order(data):
             return goods_response
         # 母订单号
         mother_order_sn = response_dict['data']['order_sn']
-        data = []
-        for goods in response_dict['data']:
+        goods_data = []
+        for goods in goods_dict['data']:
             _ = {}
             try:
                 parameters = json.dumps({'order_id': mother_order_sn})
                 response = requests.post(ORDER_API_HOST + '/api/order', data=parameters, headers=headers)
             except Exception as e:
                 logger.info('生成子订单出错')
-                response = APIResponse(success=False, data={}, msg='请求ID生成器出错')
+                # response = APIResponse(success=False, data={}, msg='请求ID生成器出错')
                 return response
             supplier_id = goods['supplier_id']
-
+            try:
+                response = requests.get(ORDER_API_HOST + '/api/service/suppliers/%s' % safe_int(supplier_id))
+                supplier_info = json.loads(response.text)
+            except Exception as e:
+                logger.info('查询供应商信息出错')
+                response = APIResponse(success=False, data={}, msg='查询供应商信息出错')
+                return response
+            if supplier_info['rescode'] != '10000':
+                return supplier_info
             _['univalent'] = goods['price']
+            _['supplier_name'] = supplier_info['company']
             _['price_discount'] = 0.0
             _['goods_id'] = goods['goods_id']
             _['supplier_id'] = supplier_id
@@ -208,7 +204,20 @@ def online_generation_order(data):
             _['number'] = goods['quantity']
             _['product_place'] = goods['product_place']
             _['son_order_sn'] = json.loads(response.text)['data']['order_sn']
-            data.append(_)
+            goods_data.append(_)
+        # 发票信息
+        if data['receipt_type'] == 3:
+            receipt = Receipt.objects.create(receipt_type=data['receipt_type'])
+        else:
+            receipt = Receipt.objects.create(
+                title=data['title'],
+                account=data['account'],
+                tax_number=data['tax_number'],
+                telephone=data['telephone'],
+                bank=data['bank'],
+                company_address=data['company_address'],
+                receipt_type=data['receipt_type'],
+            )
         # 创建母订单信息, 母订单类型订单不存在母订单
         mother_order = Order.objects.create(receipt=receipt.id, remarks=remarks, receiver=receiver, mobile=mobile,
                                             guest_id=guest_id, order_sn=mother_order_sn, address=address)
@@ -218,7 +227,7 @@ def online_generation_order(data):
         # 增加初始订单支付信息
         OrderPayment.objects.create(order_sn=mother_order_sn, pay_status=1)
         total_money = 0.0
-        for _data in data:
+        for _data in goods_data:
             # parameters = json.dumps({'order_id': mother_order_sn})
             # response = requests.post(ORDER_API_HOST + '/api/order', data=parameters, headers=headers)
             # order_sn = json.loads(response.text)['data']['order_sn']
@@ -506,7 +515,7 @@ def get_user_order_list(orders, count, is_all=False):
             __dict['univalent'] = order_detail.univalent
             __dict['subtotal_money'] = order_detail.subtotal_money
             __dict['price_discount'] = order_detail.price_discount
-            __dict['delivery_time'] = int(order_detail.delivery_time.timestamp())
+            __dict['delivery_time'] = int(order_detail.delivery_time.timestamp()) if order_detail.delivery_time else ''
             __dict['status'] = order_detail.status
             __dict['max_delivery_time'] = order_detail.max_delivery_time
             result.append(__dict)
