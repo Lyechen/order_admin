@@ -33,6 +33,9 @@ DEBUG_TOOLBAR_CONFIG = {
 # ID生成器主机地址
 ORDER_API_HOST = 'http://127.0.0.1:8000'
 
+# 商品信息查询主机
+GOODS_API_HOST = 'http://139.199.96.235:9007'
+
 # CDN域名前缀
 CDN_HOST = 'http://imgcdn.robo2025.com'
 

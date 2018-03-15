@@ -26,6 +26,7 @@ from order_admin.settings import CDN_HOST
 from .functions import generation_order, get_mother_order_detail, get_son_order_detail, get_user_order_list
 from .functions import payment_order, get_chief_order, deal_supplier_operation, supplier_confirm_order, filter_base
 from .functions import superuser_get_order_detail, returns_order, deal_returns_order, user_confirm_order
+from .functions import refund_detail, returns_detail
 
 # Create your views here.
 
@@ -1151,12 +1152,22 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
 
     def retrieve(self, request, *args, **kwargs):
         data = {}
+        is_type = safe_int(request.query_params.get('is_type', 0))
         instance = self.get_object()
         supplier_id = request.query_params.get('supplier_id', 0)
         if safe_int(supplier_id) != instance.supplier_id:
             response = APIResponse(success=False, data={}, msg='供应商ID错误')
             return response
         order_detail = instance
+        if order_detail.status in [11, 15] and is_type != 1:
+            response = APIResponse(success=False, data={}, msg='传入参数有误')
+            return response
+        elif order_detail.status in [10, 14] and is_type != 2:
+            response = APIResponse(success=False, data={}, msg='传入参数有误')
+            return response
+        elif order_detail.status not in [10, 11, 14, 15] and is_type:
+            response = APIResponse(success=False, data={}, msg='传入参数有误')
+            return response
         instance = Order.objects.filter(id=instance.order)
         if not instance:
             response = APIResponse(success=False, data={})
@@ -1184,6 +1195,12 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
                 days=order_detail.max_delivery_time)).timestamp()),
             'add_time': int(order.add_time.timestamp())
         }
+        if is_type == 1:
+            response = returns_detail(order_detail, data)
+            return response
+        elif is_type == 2:
+            response = refund_detail(order_detail, data)
+            return response
         data['receipt_info'] = {
             'receipt_id': receipt.id,
             'title': receipt.title,
@@ -1242,6 +1259,7 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
             _['add_time'] = int(operation.add_time.timestamp())
             _operations.append(_)
         data['operations'] = _operations
+
         # for order in instance:
         #     result = {}
         #     result['total_money'] = order.total_money

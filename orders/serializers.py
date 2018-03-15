@@ -48,7 +48,7 @@ class OpenReceiptSerializer(serializers.ModelSerializer):
         order_detail = OrderDetail.objects.filter(son_order_sn=order_sn)
         if not order_detail:
             raise serializers.ValidationError('传入的订单号有误')
-        if not order_detail.filter(status__in=[5, 6, 7]):
+        if not order_detail.filter(status__in=[4, 5, 6]):
             raise serializers.ValidationError('当前状态不予许上传发票')
         return attrs
 
@@ -58,7 +58,8 @@ class OrderSerializer(serializers.ModelSerializer):
     # number = serializers.IntegerField(required=True, help_text='数量', label='数量')
     # univalent = serializers.FloatField(required=True, help_text='单价', label='单价')
 
-    data = serializers.CharField(required=True, write_only=True)
+    # data = serializers.CharField(required=True, write_only=True)
+    data = serializers.JSONField(binary=False)
 
     class Meta:
         model = Order
