@@ -32,7 +32,7 @@ class OpenReceiptSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OpenReceipt
-        fields = "__all__"
+        fields = ['receipt_sn', 'order_sn', 'images', 'remarks']
 
     def validate(self, attrs):
         images = attrs['images']
