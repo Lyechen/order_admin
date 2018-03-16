@@ -654,7 +654,8 @@ def deal_supplier_operation(abnormal_type, order_sn, original_delivery_time,
     else:
         order_detail = OrderDetail.objects.get(son_order_sn=order_sn)
         expect_date_of_delivery = datetime.strptime(expect_date_of_delivery, '%Y-%m-%d')
-        original_delivery_time = datetime.strptime(original_delivery_time, '%Y-%m-%d')
+        original_delivery_time = (order_detail.add_time + timedelta(
+            days=order_detail.max_delivery_time))
         if expect_date_of_delivery < original_delivery_time:
             response = APIResponse(success=False, data={}, msg='传入的时间有误')
             return response
