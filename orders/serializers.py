@@ -143,7 +143,7 @@ class OrderPaymentSerializer(serializers.ModelSerializer):
 
 class ReturnsSerializer(serializers.ModelSerializer):
     status = serializers.ChoiceField(choices=((1, '不操作'), (2, '申请退货'), (3, '确认收货')), label='状态')
-    remarks = serializers.CharField(label='备注', allow_blank=True, allow_null=True)
+    remarks = serializers.CharField(label='备注', allow_blank=True, allow_null=True, required=False)
 
     class Meta:
         model = OrderDetail

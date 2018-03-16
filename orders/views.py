@@ -446,7 +446,7 @@ class OrderViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.Up
     def update(self, request, *args, **kwargs):
         guest_id = self.request.query_params.get('guest_id', 0)
         status = safe_int(self.request.data.get('status', 0))
-        remarks = safe_int(self.request.data.get('remarks', ''))
+        remarks = self.request.data.get('remarks', '')
         if not guest_id:
             response = APIResponse(data={}, success=False, msg='调用参数有误,guest_id不能为空')
             return response
@@ -468,6 +468,9 @@ class OrderViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.Up
             response = user_confirm_order(instance, guest_id)
             return response
         elif status:
+            if not remarks:
+                response = APIResponse(success=False, data={}, msg='status:不能为空')
+                return response
             instance = self.get_object()
             response = returns_order(instance, status, guest_id, remarks)
             return response
