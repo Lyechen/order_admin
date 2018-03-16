@@ -1143,6 +1143,10 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
                 _result = {}
                 _result['id'] = order_detail.id
                 _result['son_order_sn'] = order_detail.son_order_sn
+                _result['guest_company_name'] = order_detail.guest_company_name
+                _result['receiver'] = order.receiver
+                _result['mobile'] = order.mobile
+                _result['address'] = order.province + order.city + order.district + order.address
                 _result['supplier_id'] = order_detail.supplier_id
                 _result['number'] = order_detail.number
                 _result['univalent'] = order_detail.univalent
@@ -1166,7 +1170,7 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
                     _receipt = {}
                     _receipt['receipt_sn'] = open_receipt.receipt_sn
                     _receipt['order_sn'] = open_receipt.order_sn
-                    _receipt['images'] = CDN_HOST + open_receipt.images
+                    _receipt['images'] = CDN_HOST + open_receipt.images if open_receipt.images else ''
                     _receipt['remarks'] = open_receipt.remarks
                     _receipt['add_time'] = int(open_receipt.add_time.timestamp())
                     _open_receipt.append(_receipt)
@@ -1216,6 +1220,7 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
             'max_delivery_time': order_detail.max_delivery_time,
             'status': order_detail.status,
             'goods_id': order_detail.goods_id,
+            'goods_unit': order_detail.goods_unit,
             'goods_name': '西门子马达',
             'model': order_detail.model,
             'brand': order_detail.brand,
@@ -1273,6 +1278,7 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
             _['date_of_delivery'] = _log.date_of_delivery
             _['logistics_number'] = _log.logistics_number
             _['add_time'] = int(_log.add_time.timestamp())
+            _['sender'] = _log.sender
             _logistics.append(_)
         data['logistics'] = _logistics
 

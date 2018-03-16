@@ -35,6 +35,8 @@ ORDER_API_HOST = 'http://127.0.0.1:8000'
 
 # 商品信息查询主机
 GOODS_API_HOST = 'http://139.199.96.235:9007'
+# 供应商查询主机
+SUPPLIER_API_HOST = 'http://139.199.96.235:9006'
 
 # CDN域名前缀
 CDN_HOST = 'http://imgcdn.robo2025.com'

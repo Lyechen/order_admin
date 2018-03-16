@@ -297,6 +297,7 @@ class OrderReturns(models.Model):
     order_sn = models.CharField(max_length=17, verbose_name='订单号', help_text='订单号', default='')
     returns_sn = models.CharField(max_length=20, verbose_name='退货单号', help_text='退货单号')
     receiver = models.CharField(max_length=30, verbose_name='收货人', help_text='收货人')
+    sender = models.CharField(max_length=30, verbose_name='送货人', help_text='送货人', default='')
     mobile = models.CharField(max_length=11, verbose_name='联系电话', help_text='联系电话')
     address = models.CharField(max_length=200, verbose_name='收货地址', help_text='收货地址')
     status = models.IntegerField(choices=RETURNS_STATUS, verbose_name='状态', help_text='状态', default=1)
@@ -327,6 +328,7 @@ class OrderRefund(models.Model):
     """订单退款表"""
     order_sn = models.CharField(max_length=17, verbose_name='订单号', help_text='订单号', default='')
     refund_sn = models.CharField(max_length=20, verbose_name='退款单号', help_text='退款单号')
+    returns_sn = models.CharField(max_length=20, verbose_name='退货单号', help_text='退货单号', default='')
     amount = models.FloatField(default=0.0, verbose_name='退款金额', help_text='退款金额')
     status = models.IntegerField(choices=REFUND_STATUS, verbose_name='状态', help_text='状态', default=1)
     add_time = models.DateTimeField(default=timezone.now, verbose_name='添加时间')

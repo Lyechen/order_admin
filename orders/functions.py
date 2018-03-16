@@ -21,7 +21,7 @@ from .serializers import OpenReceiptSerializer, AbnormalOrderSerializer, ChiefUp
 from .serializers import SupplierUpdateOrderSerializer, SuperUserUpdateSerializer
 from .models import Order, Receipt, OrderDetail, OrderLogistics, OrderOperationRecord, OrderPayment, OrderCancel
 from .models import OpenReceipt, AbnormalOrder, SuperUserOperation, ReturnsDeal, OrderReturns, OrderRefund
-from order_admin.settings import ORDER_API_HOST, GOODS_API_HOST
+from order_admin.settings import ORDER_API_HOST, GOODS_API_HOST, SUPPLIER_API_HOST
 from utils.log import logger
 from utils.string_extension import safe_int
 from utils.http import APIResponse, CONTENT_RANGE, CONTENT_TOTAL, get_limit
@@ -159,7 +159,7 @@ def online_generation_order(data):
             return response
         # 获取商品信息
         try:
-            parameters = {'goods_ids': [1, 2, 3], 'quantities': [10, 10, 10]}
+            parameters = {'goods_ids': goods_id_list, 'quantities': number_list}
             goods_response = requests.get(GOODS_API_HOST + '/api/service/checkout/goods', parameters, headers=headers)
             goods_dict = json.loads(goods_response.text)
         except Exception as e:
@@ -171,7 +171,7 @@ def online_generation_order(data):
         # 母订单号
         mother_order_sn = response_dict['data']['order_sn']
         goods_data = []
-        for goods in goods_dict['data']:
+        for goods in goods_dict['data'].values():
             _ = {}
             try:
                 parameters = json.dumps({'order_id': mother_order_sn})
@@ -180,9 +180,10 @@ def online_generation_order(data):
                 logger.info('生成子订单出错')
                 # response = APIResponse(success=False, data={}, msg='请求ID生成器出错')
                 return response
+            son_order_sn = json.loads(response.text)['data']['order_sn']
             supplier_id = goods['supplier_id']
             try:
-                response = requests.get(ORDER_API_HOST + '/api/service/suppliers/%s' % safe_int(supplier_id))
+                response = requests.get(SUPPLIER_API_HOST + '/api/service/suppliers/%s' % safe_int(supplier_id))
                 supplier_info = json.loads(response.text)
             except Exception as e:
                 logger.info('查询供应商信息出错')
@@ -191,19 +192,20 @@ def online_generation_order(data):
             if supplier_info['rescode'] != '10000':
                 return supplier_info
             _['univalent'] = goods['price']
-            _['supplier_name'] = supplier_info['company']
+            _['supplier_name'] = supplier_info['data']['company']
             _['price_discount'] = 0.0
             _['goods_id'] = goods['goods_id']
             _['supplier_id'] = supplier_id
             _['goods_name'] = goods['goods_name']
             _['model'] = goods['partnumber']
             _['goods_unit'] = goods['sales_unit']
-            _['max_delivery_time'] = goods['lead_time']
-            _['brand'] = goods['brand']
+            res = re.match(r'\d+', goods['lead_time'])
+            _['max_delivery_time'] = int(res.group()) if res else 7
+            _['brand'] = goods['brand_name']
             _['goods_sn'] = goods['gno']
             _['number'] = goods['quantity']
-            _['product_place'] = goods['product_place']
-            _['son_order_sn'] = json.loads(response.text)['data']['order_sn']
+            _['product_place'] = goods['prodution_place']
+            _['son_order_sn'] = son_order_sn
             goods_data.append(_)
         # 发票信息
         if data['receipt_type'] == 3:
@@ -269,9 +271,9 @@ def online_generation_order(data):
         'mother_order_sn': mother_order_sn,
         'add_time': mother_order.add_time,
         'address': mother_order.address,
-        'receipt_title': data[0]['title'],
+        'receipt_title': receipt.title,
         'receipt_type': RECEIPT_TYPE[receipt.receipt_type],
-        'status': ORDER_STATUS[order_status]
+        'status': order_status
     }
     response = APIResponse(success=True, data=result, msg='创建订单信息成功')
     return response
@@ -529,6 +531,10 @@ def payment_order(serializer, guest_id):
     pay_type = serializer.data['pay_type']
     order_sn = serializer.data['order_sn']
     order = Order.objects.get(order_sn=order_sn)
+    order_operation = OrderOperationRecord.objects.filter(order_sn=order_sn, status=2)
+    if order_operation:
+        response = APIResponse(data={}, success=False, msg='订单[%s]已经支付,无需重复支付' % order_sn)
+        return response
     orders = OrderDetail.objects.filter(order=order.id, status=1)
     OrderPayment.objects.create(order_sn=order_sn, pay_type=pay_type, trade_no=trade_no, pay_status=2)
     OrderOperationRecord.objects.create(order_sn=order_sn, status=2, operator=guest_id,
@@ -742,6 +748,8 @@ def superuser_get_order_detail(orders, son_id=None):
 def deal_returns_order(order_details, returns_status, returns_sn, start_time='', end_time='', is_type=1):
     data = []
     order_returns = OrderReturns.objects.filter(order_sn__in=[obj.son_order_sn for obj in order_details])
+    if is_type == 2:
+        order_refund = OrderRefund.objects.filter(order_sn__in=[obj.son_order_sn for obj in order_details])
     if returns_sn:
         order_returns = order_returns.filter(returns_sn=returns_sn)
     if returns_status:
@@ -763,6 +771,8 @@ def deal_returns_order(order_details, returns_status, returns_sn, start_time='',
             return response
         order_detail = order_detail[0]
         result['id'] = order_detail.id
+        result['goods_name'] = order_detail.goods_name
+        result['goods_unit'] = order_detail.goods_unit
         result['order_sn'] = order_detail.son_order_sn
         result['subtotal_money'] = order_detail.subtotal_money
         result['model'] = order_detail.model
@@ -771,7 +781,10 @@ def deal_returns_order(order_details, returns_status, returns_sn, start_time='',
         result['univalent'] = order_detail.univalent
         result['returns_sn'] = order_return.returns_sn
         result['status'] = order_return.status
-        result['add_time'] = order_return.add_time
+        result['returns_time'] = order_return.add_time
+        if is_type == 2:
+            result['refund_time'] = order_refund[0].add_time if order_refund else ''
+            result['refund_sn'] = order_refund[0].refund_sn if order_refund else ''
         data.append(result)
     msg = '全部退货单' if is_type == 1 else '全部退款单'
     response = APIResponse(success=True, data=data, msg=msg)
@@ -814,7 +827,7 @@ def supplier_confirm_order(order_sn):
                                             progress='已收货', time_consuming=time_consuming)
 
         OrderRefund.objects.create(order_sn=order_detail.son_order_sn, refund_sn=refund_sn,
-                                   amount=order_detail.subtotal_money, status=1)
+                                   return_sn=order_return.returns_sn, amount=order_detail.subtotal_money, status=1)
         OrderOperationRecord.objects.create(order_sn=order_return.order_sn, status=11,
                                             operator=0,
                                             execution_detail='系统自动生成退款单',
@@ -864,18 +877,39 @@ def filter_base(order_details, order_sn='', goods_name='', brand='', start_time=
 def returns_detail(order_detail, data):
     # 退货信息
     order_return = OrderReturns.objects.filter(order_sn=order_detail.son_order_sn).order_by('-add_time')
+    return_deal = ReturnsDeal.objects.filter(order_sn=order_detail.son_order_sn).order_by('-add_time')
     return_info = {}
+    return_logistics = {}
     if order_return:
         order_return = order_return[0]
+        return_deal = return_deal[0]
         return_info['returns_sn'] = order_return.returns_sn
         return_info['order_sn'] = order_return.order_sn
-        return_info['receiver'] = order_return.receiver
-        return_info['address'] = order_return.address
+        return_info['remarks'] = order_return.order_sn
         return_info['status'] = order_return.status
-        return_info['logistics_company'] = order_return.logistics_company
-        return_info['logistics_number'] = order_return.logistics_number
-        return_info['add_time'] = int(order_return.add_time.timestamp())
+        return_info['returns_time'] = int(return_deal.add_time.timestamp())
+        return_info['returns_money'] = order_detail.subtotal_money
+        return_info['remarks'] = return_deal.remarks
+        return_logistics['receiver'] = order_return.receiver
+        return_logistics['address'] = order_return.address
+        return_logistics['logistics_company'] = order_return.logistics_company
+        return_logistics['logistics_number'] = order_return.logistics_number
+        return_logistics['logistics_type'] = 2
+        return_logistics['mobile'] = order_return.mobile
+        return_logistics['sender'] = order_return.sender
     data['return_info'] = return_info
+    data['return_logistics'] = return_logistics
+    operation_record = []
+    for operation in OrderOperationRecord.objects.filter(status__in=[12, 13]):
+        _op = {}
+        _op['order_sn'] = operation.order_sn
+        _op['status'] = operation.status
+        _op['execution_detail'] = operation.execution_detail
+        _op['progress'] = operation.progress
+        _op['time_consuming'] = operation.time_consuming
+        _op['add_time'] = int(operation.add_time.timestamp())
+        operation_record.append(_op)
+    data['operation_record'] = operation_record
     response = APIResponse(success=True, data=data, msg='退货单详情')
     return response
 
@@ -884,12 +918,24 @@ def refund_detail(order_detail, data):
     order_refund = OrderRefund.objects.filter(order_sn=order_detail.son_order_sn).order_by('-add_time')
     refund_info = {}
     if order_refund:
-        order_return = order_refund[0]
-        refund_info['order_sn'] = order_return.order_sn
-        refund_info['refund_sn'] = order_return.refund_sn
-        refund_info['amount'] = order_return.amount
-        refund_info['status'] = order_return.status
-        refund_info['add_time'] = int(order_return.add_time.timestamp())
+        order_refund = order_refund[0]
+        refund_info['order_sn'] = order_refund.order_sn
+        refund_info['refund_sn'] = order_refund.refund_sn
+        refund_info['returns_sn'] = order_refund.returns_sn
+        refund_info['amount'] = order_refund.amount
+        refund_info['status'] = order_refund.status
+        refund_info['freight'] = 0.0
+        refund_info['add_time'] = int(order_refund.add_time.timestamp())
+    operation_record = []
+    for operation in OrderOperationRecord.objects.filter(status__in=[11, 12, 13, 14]):
+        _op = {}
+        _op['order_sn'] = operation.order_sn
+        _op['status'] = operation.status
+        _op['execution_detail'] = operation.execution_detail
+        _op['progress'] = operation.progress
+        _op['time_consuming'] = operation.time_consuming
+        _op['add_time'] = int(operation.add_time.timestamp())
+        operation_record.append(_op)
     data['refund_info'] = refund_info
     response = APIResponse(success=True, data=data, msg='退款单详情')
     return response
