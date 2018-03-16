@@ -752,7 +752,10 @@ def superuser_get_order_detail(orders, son_id=None):
 def deal_returns_order(order_details, returns_status, returns_sn, start_time='', end_time='', is_type=1):
     data = []
     order_returns = OrderReturns.objects.filter(order_sn__in=[obj.son_order_sn for obj in order_details])
-    returns_deal = ReturnsDeal.objects.filter(order_sn__in=[obj.son_order_sn for obj in order_details])
+    returns_deal = ReturnsDeal.objects.filter(order_sn__in=[obj.son_order_sn for obj in order_details],
+                                              return_type=is_type).exclude(
+        order_sn__in=[obj.order_sn for obj in order_returns]
+    )
     if is_type == 2:
         order_refund = OrderRefund.objects.filter(order_sn__in=[obj.son_order_sn for obj in order_details])
     if returns_sn:
@@ -792,7 +795,7 @@ def deal_returns_order(order_details, returns_status, returns_sn, start_time='',
                 result['refund_time'] = order_refund[0].add_time if order_refund else ''
                 result['refund_sn'] = order_refund[0].refund_sn if order_refund else ''
             data.append(result)
-    elif returns_deal:
+    if returns_deal:
         for _deal in returns_deal:
             result = {}
             order_detail = order_details.filter(son_order_sn=_deal.order_sn)
@@ -816,9 +819,6 @@ def deal_returns_order(order_details, returns_status, returns_sn, start_time='',
                 result['refund_time'] = ''
                 result['refund_sn'] = ''
             data.append(result)
-    else:
-        response = APIResponse(success=False, data={}, msg='没有退货申请记录，请联系管理员')
-        return response
     msg = '全部退货单' if is_type == 1 else '全部退款单'
     response = APIResponse(success=True, data=data, msg=msg)
     return response
