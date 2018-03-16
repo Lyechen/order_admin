@@ -13,9 +13,9 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-import xadmin
+# import xadmin
 from django.urls import path, include
-from xadmin.plugins import xversion
+# from xadmin.plugins import xversion
 from rest_framework.routers import DefaultRouter
 from rest_framework_jwt.views import obtain_jwt_token
 from rest_framework.documentation import include_docs_urls
@@ -24,8 +24,8 @@ from orders.views import OrderViewSet, OrderCancelViewSet, OrderPaymentViewSet, 
 from orders.views import OrderLogisticsViewSet, ReceiptViewSet, AbnormalOrderViewSet, SupperUserViewSet
 from orders.views import AdminOrderCancelViewSet, MyOrderViewSet, SupplierOrderAdminViewSet, OrderFinanceViewSet
 
-xadmin.autodiscover()
-xversion.register_models()
+# xadmin.autodiscover()
+# xversion.register_models()
 
 route = DefaultRouter(trailing_slash=False)
 # 提交订单
@@ -54,7 +54,7 @@ route.register('superuser/order', SupperUserViewSet, base_name='super/order')
 route.register('order/finance', OrderFinanceViewSet, base_name='order/finance')
 
 urlpatterns = [
-    path('xadmin/', xadmin.site.urls),
+    # path('xadmin/', xadmin.site.urls),
     path('v1/', include(route.urls)),
     path(r'api-auth/', include('rest_framework.urls', namespace='rest_framework')),
     path(r'docs/', include_docs_urls(title='订单管理')),

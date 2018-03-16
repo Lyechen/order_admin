@@ -1,32 +1,29 @@
-import re
 import json
 import requests
 
 from rest_framework import mixins
 from rest_framework import viewsets
-from rest_framework import status
-from rest_framework.response import Response
 from django.db.models import Q
 from datetime import datetime, timedelta
-from django.forms.models import model_to_dict
 
 from .serializers import OrderSerializer, OrderDetailSerializer, OrderCancelSerializer, OrderPaymentSerializer
-from .serializers import UserOrderSerializer, OrderDelaySerializer, AdminOrderCancelSerializer
+from .serializers import UserOrderSerializer, AdminOrderCancelSerializer
 from .serializers import SupplierOrderAdminSerializer, OrderLogisticsSerializer, ReceiptSerializer
 from .serializers import OpenReceiptSerializer, AbnormalOrderSerializer, ChiefUpdateOrderSerializer
 from .serializers import SupplierUpdateOrderSerializer, SuperUserUpdateSerializer, ChiefCancelOrderSerializer
-from .serializers import ReturnsSerializer, ReturnOrderSerializer, OrderFinanceSerializer
+from .serializers import ReturnsSerializer, ReturnOrderSerializer
 from .models import Order, Receipt, OrderDetail, OrderLogistics, OrderOperationRecord, OrderPayment, OrderCancel
 from .models import OpenReceipt, AbnormalOrder, SuperUserOperation, ReturnsDeal, OrderReturns, OrderRefund
 from order_admin.settings import ORDER_API_HOST
 from utils.log import logger
 from utils.string_extension import safe_int, safe_float
-from utils.http import APIResponse, CONTENT_RANGE, CONTENT_TOTAL, get_limit
+from utils.http import APIResponse, CONTENT_RANGE, CONTENT_TOTAL
 from order_admin.settings import CDN_HOST
 from .functions import generation_order, get_mother_order_detail, get_son_order_detail, get_user_order_list
 from .functions import payment_order, get_chief_order, deal_supplier_operation, supplier_confirm_order, filter_base
 from .functions import superuser_get_order_detail, returns_order, deal_returns_order, user_confirm_order
 from .functions import refund_detail, returns_detail, online_generation_order
+from auth.authentication import UserAuthentication, AdminUserAuthentication, SupplierAuthentication
 
 # Create your views here.
 
@@ -128,6 +125,7 @@ class OrderViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.Up
                    mixins.DestroyModelMixin, viewsets.GenericViewSet):
     # serializer_class = OrderSerializer
     queryset = Order.objects.all()
+    authentication_classes = []
 
     def create(self, request, *args, **kwargs):
         # serializer = self.get_serializer(data=request.data)
@@ -363,7 +361,7 @@ class OrderViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.Up
         elif is_type == 2:
             orders = Order.objects.filter(guest_id=guest_id,
                                           id__in=[obj.order for obj in
-                                                  OrderDetail.objects.filter(status__in=[6, 10])])
+                                                  OrderDetail.objects.filter(status__in=[5])])
         elif is_type == 3:
             orders = Order.objects.filter(guest_id=guest_id, id__in=[obj.order for obj in
                                                                      OrderDetail.objects.filter(status=11)])
@@ -458,8 +456,11 @@ class OrderViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.Up
         except Exception as e:
             non_field_errors = ''
             if hasattr(e, 'detail'):
-                non_field_errors = e.detail.get('non_field_errors', '')
-            response = APIResponse(data={}, success=False, msg=non_field_errors[0] if non_field_errors else '请求出错')
+                if e.detail.get('non_field_errors', ''):
+                    non_field_errors = e.detail.get('non_field_errors')[0]
+                else:
+                    non_field_errors = e.detail
+            response = APIResponse(data={}, success=False, msg=non_field_errors if non_field_errors else '请求出错')
             return response
         if status == 3:
             """确认收货逻辑"""
@@ -537,8 +538,11 @@ class OrderCancelViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
         except Exception as e:
             non_field_errors = ''
             if hasattr(e, 'detail'):
-                non_field_errors = e.detail.get('non_field_errors', '')
-            response = APIResponse(data={}, success=False, msg=non_field_errors[0] if non_field_errors else '请求出错')
+                if e.detail.get('non_field_errors', ''):
+                    non_field_errors = e.detail.get('non_field_errors')[0]
+                else:
+                    non_field_errors = e.detail
+            response = APIResponse(data={}, success=False, msg=non_field_errors if non_field_errors else '请求出错')
             return response
         order_sn = serializer.validated_data['order_sn']
         guest_id = serializer.validated_data['guest_id']
@@ -593,8 +597,11 @@ class OrderPaymentViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
         except Exception as e:
             non_field_errors = ''
             if hasattr(e, 'detail'):
-                non_field_errors = e.detail.get('non_field_errors', '')
-            response = APIResponse(data={}, success=False, msg=non_field_errors[0] if non_field_errors else '请求出错')
+                if e.detail.get('non_field_errors', ''):
+                    non_field_errors = e.detail.get('non_field_errors')[0]
+                else:
+                    non_field_errors = e.detail
+            response = APIResponse(data={}, success=False, msg=non_field_errors if non_field_errors else '请求出错')
             return response
         trade_no = serializer.data['trade_no']
         pay_type = serializer.data['pay_type']
@@ -856,8 +863,11 @@ class ChiefOrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins
         except Exception as e:
             non_field_errors = ''
             if hasattr(e, 'detail'):
-                non_field_errors = e.detail.get('non_field_errors', '')
-            response = APIResponse(data={}, success=False, msg=non_field_errors[0] if non_field_errors else '请求出错')
+                if e.detail.get('non_field_errors', ''):
+                    non_field_errors = e.detail.get('non_field_errors')[0]
+                else:
+                    non_field_errors = e.detail
+            response = APIResponse(data={}, success=False, msg=non_field_errors if non_field_errors else '请求出错')
             return response
         # if serializer.validated_data['is_type'] == 1:
         # 延期处理
@@ -888,8 +898,11 @@ class ChiefOrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins
         except Exception as e:
             non_field_errors = ''
             if hasattr(e, 'detail'):
-                non_field_errors = e.detail.get('non_field_errors', '')
-            response = APIResponse(data={}, success=False, msg=non_field_errors[0] if non_field_errors else '请求出错')
+                if e.detail.get('non_field_errors', ''):
+                    non_field_errors = e.detail.get('non_field_errors')[0]
+                else:
+                    non_field_errors = e.detail
+            response = APIResponse(data={}, success=False, msg=non_field_errors if non_field_errors else '请求出错')
             return response
         responsible_party = serializer.validated_data['responsible_party']
         cancel_desc = serializer.validated_data['cancel_desc']
@@ -921,8 +934,11 @@ class AdminOrderCancelViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
         except Exception as e:
             non_field_errors = ''
             if hasattr(e, 'detail'):
-                non_field_errors = e.detail.get('non_field_errors', '')
-            response = APIResponse(data={}, success=False, msg=non_field_errors[0] if non_field_errors else '请求出错')
+                if e.detail.get('non_field_errors', ''):
+                    non_field_errors = e.detail.get('non_field_errors')[0]
+                else:
+                    non_field_errors = e.detail
+            response = APIResponse(data={}, success=False, msg=non_field_errors if non_field_errors else '请求出错')
             return response
         order_sn = serializer.data['order_sn']
         responsible_party = serializer.data['responsible_party']
@@ -979,8 +995,11 @@ class MyOrderViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewset
         except Exception as e:
             non_field_errors = ''
             if hasattr(e, 'detail'):
-                non_field_errors = e.detail.get('non_field_errors', '')
-            response = APIResponse(data={}, success=False, msg=non_field_errors[0] if non_field_errors else '请求出错')
+                if e.detail.get('non_field_errors', ''):
+                    non_field_errors = e.detail.get('non_field_errors')[0]
+                else:
+                    non_field_errors = e.detail
+            response = APIResponse(data={}, success=False, msg=non_field_errors if non_field_errors else '请求出错')
             return response
         is_detail = request.query_params.get('is_detail', 0)
         order_sn = request.query_params.get('order_sn', '')
@@ -1393,8 +1412,11 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
         except Exception as e:
             non_field_errors = ''
             if hasattr(e, 'detail'):
-                non_field_errors = e.detail.get('non_field_errors', '')
-            response = APIResponse(data={}, success=False, msg=non_field_errors[0] if non_field_errors else '请求出错')
+                if e.detail.get('non_field_errors', ''):
+                    non_field_errors = e.detail.get('non_field_errors')[0]
+                else:
+                    non_field_errors = e.detail
+            response = APIResponse(data={}, success=False, msg=non_field_errors if non_field_errors else '请求出错')
             return response
         order_sn = instance.son_order_sn
         original_delivery_time = request.data.get('original_delivery_time', '')
@@ -1468,8 +1490,11 @@ class OrderLogisticsViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, 
             logger.info('创建物流信息发生错误')
             non_field_errors = ''
             if hasattr(e, 'detail'):
-                non_field_errors = e.detail.get('non_field_errors', '')
-            response = APIResponse(data={}, success=False, msg=non_field_errors[0] if non_field_errors else '请求出错')
+                if e.detail.get('non_field_errors', ''):
+                    non_field_errors = e.detail.get('non_field_errors')[0]
+                else:
+                    non_field_errors = e.detail
+            response = APIResponse(data={}, success=False, msg=non_field_errors if non_field_errors else '请求出错')
             return response
         is_type = safe_int(self.request.query_params.get('is_type', 0))
         if is_type == 1:
@@ -1547,8 +1572,11 @@ class ReceiptViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, viewset
         except Exception as e:
             non_field_errors = ''
             if hasattr(e, 'detail'):
-                non_field_errors = e.detail.get('non_field_errors', '')
-            response = APIResponse(data={}, success=False, msg=non_field_errors[0] if non_field_errors else '请求出错')
+                if e.detail.get('non_field_errors', ''):
+                    non_field_errors = e.detail.get('non_field_errors')[0]
+                else:
+                    non_field_errors = e.detail
+            response = APIResponse(data={}, success=False, msg=non_field_errors if non_field_errors else '请求出错')
             return response
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
@@ -1574,8 +1602,11 @@ class AbnormalOrderViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
         except Exception as e:
             non_field_errors = ''
             if hasattr(e, 'detail'):
-                non_field_errors = e.detail.get('non_field_errors', '')
-            response = APIResponse(data={}, success=False, msg=non_field_errors[0] if non_field_errors else '请求出错')
+                if e.detail.get('non_field_errors', ''):
+                    non_field_errors = e.detail.get('non_field_errors')[0]
+                else:
+                    non_field_errors = e.detail
+            response = APIResponse(data={}, success=False, msg=non_field_errors if non_field_errors else '请求出错')
             return response
         self.perform_create(serializer)
         order_sn = serializer.data['order_sn']

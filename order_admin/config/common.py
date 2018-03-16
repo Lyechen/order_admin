@@ -72,11 +72,11 @@ INSTALLED_APPS_CUSTOM = [
     # add your app here...
     # Note: 请注意在第一次syncdb时不加自己的app
     # 'debug_toolbar',
-    'crispy_forms',
-    'reversion',
-    'xadmin',
+    # 'crispy_forms',
+    # 'reversion',
+    # 'xadmin',
     'orders',
-    'django_filters',
+    # 'django_filters',
 ]
 
 # ===============================================================================
