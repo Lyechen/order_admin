@@ -558,7 +558,10 @@ def payment_order(serializer, guest_id):
 
 def returns_order(instance, status, guest_id, remarks):
     if not isinstance(instance, OrderDetail):
-        response = APIResponse(success=False, data={})
+        response = APIResponse(success=False, data={}, msg='ID有误或参数错误')
+        return response
+    if instance.status != 6:
+        response = APIResponse(success=False, data={}, msg='当前状态不允许退货')
         return response
     if status == 2:
         # 状态
@@ -828,7 +831,7 @@ def supplier_confirm_order(order_sn):
                                             progress='已收货', time_consuming=time_consuming)
 
         OrderRefund.objects.create(order_sn=order_detail.son_order_sn, refund_sn=refund_sn,
-                                   return_sn=order_return.returns_sn, amount=order_detail.subtotal_money, status=1)
+                                   returns_sn=order_return.returns_sn, amount=order_detail.subtotal_money, status=1)
         OrderOperationRecord.objects.create(order_sn=order_return.order_sn, status=11,
                                             operator=0,
                                             execution_detail='系统自动生成退款单',
@@ -837,7 +840,7 @@ def supplier_confirm_order(order_sn):
         pass
         response = APIResponse(success=True, data={}, msg='供应商确认收货成功,生成退款单成功')
     else:
-        response = APIResponse(success=False, data={}, msg='确认收货操作传入的参数有误,或该订单当前状态不支持此操作')
+        response = APIResponse(success=False, data={}, msg='用户尚未填写物流信息,不能执行确认收货操作')
     return response
 
 

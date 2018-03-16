@@ -464,12 +464,17 @@ class OrderViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.Up
             return response
         if status == 3:
             """确认收货逻辑"""
-            instance = self.get_object()
+            try:
+                instance = self.get_object()
+            except Exception as e:
+                response = APIResponse(success=False, data={}, msg='ID有误')
+                return response
+
             response = user_confirm_order(instance, guest_id)
             return response
         elif status:
             if not remarks:
-                response = APIResponse(success=False, data={}, msg='status:不能为空')
+                response = APIResponse(success=False, data={}, msg='remarks:不能为空')
                 return response
             instance = self.get_object()
             response = returns_order(instance, status, guest_id, remarks)
@@ -1540,9 +1545,12 @@ class OrderLogisticsViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, 
                                                 progress='已发货', time_consuming=time_consuming)
             response = APIResponse(success=True, data=serializer.data, msg='创建物流信息成功')
             return response
-        self.perform_create(serializer)
         order_sn = serializer.data['order_sn']
         order_detail = OrderDetail.objects.get(son_order_sn=order_sn)
+        if order_detail.status == 11:
+            response = APIResponse(data={}, success=False, msg='当前订单状态为退货中,只允许客户发货')
+            return response
+        self.perform_create(serializer)
         order_detail.status = 5
         order_detail.save()
         now = datetime.now()
