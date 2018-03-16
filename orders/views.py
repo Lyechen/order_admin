@@ -1895,7 +1895,7 @@ class SupperUserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins
             time_consuming = float(now.timestamp() - order_detail[0].add_time.timestamp())
             SuperUserOperation.objects.create(order_sn=order_sn, operator=user_id,
                                               original_status=order_detail[0].status, changed_status=6)
-            OrderOperationRecord.objects.create(order_sn=order_sn, status=6,
+            OrderOperationRecord.objects.create(order_sn=order_sn, status=7,
                                                 operator=user_id,
                                                 execution_detail='超级管理员[%s]执行订单[%s]确认收货操作' % (user_id, order_sn),
                                                 progress='已收货', time_consuming=time_consuming)
