@@ -1545,7 +1545,7 @@ class OrderLogisticsViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, 
                                                 progress='已发货', time_consuming=time_consuming)
             response = APIResponse(success=True, data=serializer.data, msg='创建物流信息成功')
             return response
-        order_sn = serializer.data['order_sn']
+        order_sn = serializer.validated_data['order_sn']
         order_detail = OrderDetail.objects.get(son_order_sn=order_sn)
         if order_detail.status == 11:
             response = APIResponse(data={}, success=False, msg='当前订单状态为退货中,只允许客户发货')
