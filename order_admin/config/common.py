@@ -16,7 +16,7 @@ STATIC_VERSION = 1.0
 # ===============================================================================
 # SSO 配置
 # ===============================================================================
-SSO_HOST = os.environ.get('SSO_HOST', 'http://127.0.0.1:8011')
+SSO_HOST = os.environ.get('SSO_HOST', 'https://login.robo2025.com')
 SSO_VERIFY = SSO_HOST + '/server/verify'
 SSO_EXPIRE_TIME = 24 * 60 * 60
 

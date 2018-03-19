@@ -24,7 +24,7 @@ def get_user(request):
 
     start = time.time()
     try:
-        result = requests.get(settings.SSO_VERIFY, headers={'Authorization': token})
+        result = requests.get(settings.SSO_VERIFY, headers={'Authorization': token}, verify=False)
         status_code = result.status_code
         result = result.json()
     except Exception as ex:

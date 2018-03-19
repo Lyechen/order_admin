@@ -32,6 +32,7 @@ ORDER_STATUS = (
     (13, '无货'),
     (14, '退款完成'),
     (15, '退货完成'),
+    (16, '订单流转结束'),
 )
 
 PAYMENT_STATUS = (
@@ -111,6 +112,9 @@ IS_DEAL = (
 RETURNS_STATUS = (
     (1, '待收货'),
     (2, '确认收货'),
+    (3, '待审核'),
+    (4, '审核未通过'),
+    (5, '待上传物流信息')
 )
 
 REFUND_STATUS = (
@@ -300,7 +304,7 @@ class OrderReturns(models.Model):
     sender = models.CharField(max_length=30, verbose_name='送货人', help_text='送货人', default='')
     mobile = models.CharField(max_length=11, verbose_name='联系电话', help_text='联系电话')
     address = models.CharField(max_length=200, verbose_name='收货地址', help_text='收货地址')
-    status = models.IntegerField(choices=RETURNS_STATUS, verbose_name='状态', help_text='状态', default=1)
+    status = models.IntegerField(choices=RETURNS_STATUS, verbose_name='状态', help_text='状态', default=3)
     # logistics_type = models.IntegerField(choices=LOGISTICS_TYPE, default=1, verbose_name='物流方式', help_text='物流方式')
     logistics_company = models.CharField(default='', null=True, blank=True, max_length=100, verbose_name='物流公司',
                                          help_text='物流公司')
@@ -344,6 +348,7 @@ class OrderRefund(models.Model):
 class ReturnsDeal(models.Model):
     """退货处理表"""
     order_sn = models.CharField(max_length=17, verbose_name='订单号', help_text='订单号')
+    return_sn = models.CharField(max_length=20, verbose_name='退货退款单号', help_text='退货退款单号', default='')
     return_type = models.IntegerField(choices=RETURNS_TYPE, default=1, verbose_name='退货类型', help_text='退货类型')
     is_deal = models.IntegerField(choices=IS_DEAL, default=1, verbose_name='是否处理', help_text='是否处理')
     remarks = models.TextField(default='', verbose_name='客户备注', help_text='客户备注')
@@ -364,6 +369,7 @@ class AbnormalOrder(models.Model):
     remarks = models.TextField(default='', verbose_name='客户备注', help_text='客户备注')
     original_delivery_time = models.DateField(null=True, blank=True, verbose_name='原发货日', help_text='原发货日')
     expect_date_of_delivery = models.DateField(null=True, blank=True, verbose_name='预计发货日', help_text='预计发货日')
+    is_pass = models.BooleanField(verbose_name='是否通过审核', help_text='是否通过审核', default=False)
     is_deal = models.IntegerField(choices=IS_DEAL, default=1, verbose_name='是否处理', help_text='是否处理')
     responsible_party = models.IntegerField(choices=RESPONSIBLE_PARTY, default=1, verbose_name='责任方', help_text='责任方')
     add_time = models.DateTimeField(default=timezone.now, verbose_name='添加时间')

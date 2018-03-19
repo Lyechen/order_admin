@@ -1095,6 +1095,7 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
                                 viewsets.GenericViewSet):
     serializer_class = SupplierOrderAdminSerializer
     queryset = OrderDetail.objects.all()
+    authentication_classes = [SupplierAuthentication]
 
     # def get_object(self):
     #     supplier_id = self.kwargs.get('pk', 0)
@@ -1111,7 +1112,7 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
     def list(self, request, *args, **kwargs):
         offset = safe_int(request.query_params.get('offset', 0))
         limit = safe_int(request.query_params.get('limit', 15))
-        supplier_id = request.query_params.get('supplier_id', 0)
+        supplier_id = request.user.id
         order_sn = request.query_params.get('order_sn', '')
         goods_name = request.query_params.get('goods_name', '')
         order_status = request.query_params.get('order_status', '')
@@ -1215,7 +1216,7 @@ class SupplierOrderAdminViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMix
         data = {}
         is_type = safe_int(request.query_params.get('is_type', 0))
         instance = self.get_object()
-        supplier_id = request.query_params.get('supplier_id', 0)
+        supplier_id = request.user.id
         if safe_int(supplier_id) != instance.supplier_id:
             response = APIResponse(success=False, data={}, msg='供应商ID错误')
             return response
@@ -1508,26 +1509,12 @@ class OrderLogisticsViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, 
         is_type = safe_int(self.request.query_params.get('is_type', 0))
         if is_type == 1:
             order_sn = serializer.data['order_sn']
-            # 获取退货单号逻辑
-            headers = {'content-type': 'application/json',
-                       'user-agent': "User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.94 Safari/537.36"}
-            parameters = json.dumps({'order_sn': order_sn})
-            try:
-                response = requests.post(ORDER_API_HOST + '/api/rejected', data=parameters, headers=headers)
-                response_dict = json.loads(response.text)
-            except Exception as e:
-                logger.info('ID生成器连接失败!!!')
-                response = APIResponse(success=False, data={}, msg='ID生成器连接失败!!!')
-                return response
-            logger.info(message='生成退货ID返回结果: %s' % response_dict)
-            if response_dict['rescode'] != '10000':
-                response = APIResponse(success=False, data={}, msg='ID生成器出错!!!')
-                return response
-            returns_sn = response_dict['data']['th_order_id']
+            returns_sn = serializer.data['returns_sn']
             receiver = serializer.data['receiver']
             mobile = serializer.data['mobile']
             logistics_company = serializer.data['logistics_company']
             logistics_number = serializer.data['logistics_number']
+            address = serializer.data['address']
             now = datetime.now()
             order_operation = OrderOperationRecord.objects.filter(order_sn=order_sn).order_by('-add_time')
             time_consuming = float(now.timestamp() - order_operation[0].add_time.timestamp())
@@ -1535,13 +1522,28 @@ class OrderLogisticsViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, 
             if order_detail.status != 11:
                 response = APIResponse(success=False, data={}, msg='当前状态不允许退货')
                 return response
+            if not returns_sn.startswith('TH'):
+                response = APIResponse(success=False, data={}, msg='退货单号[%s]有误或尚未未生成退货单' % returns_sn)
+                return response
             order = Order.objects.get(pk=order_detail.order)
-            OrderReturns.objects.create(order_sn=order_sn, returns_sn=returns_sn, receiver=receiver, mobile=mobile,
-                                        logistics_company=logistics_company, logistics_number=logistics_number,
-                                        status=1)
+            try:
+                order_return = OrderReturns.objects.get(order_sn=order_sn, returns_sn=returns_sn)
+                if order_return.status != 5:
+                    response = APIResponse(success=False, data={}, msg='当前退货单状态%s,不允许上传物流信息' % order_return.status)
+                    return response
+                order_return.status = 1
+                order_return.receiver = receiver
+                order_return.logistics_number = logistics_number
+                order_return.logistics_company = logistics_company
+                order_return.mobile = mobile
+                order_return.address = address
+                order_return.save()
+            except Exception:
+                response = APIResponse(success=False, data={}, msg='退货单号不存在')
+                return response
             OrderOperationRecord.objects.create(order_sn=order_sn, status=6,
                                                 operator=order.guest_id,
-                                                execution_detail='客户[%s]对订单[%s]填写物流信息' %
+                                                execution_detail='客户[%s]对订单[%s]填写退货物流信息' %
                                                                  (order.guest_id, order_sn),
                                                 progress='已发货', time_consuming=time_consuming)
             response = APIResponse(success=True, data=serializer.data, msg='创建物流信息成功')
@@ -1834,6 +1836,18 @@ class SupperUserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins
         if not order_detail:
             response = APIResponse(success=False, data={}, msg='订单号有误')
             return response
+        serializer = self.get_serializer(data=request.data)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except Exception as e:
+            non_field_errors = ''
+            if hasattr(e, 'detail'):
+                if e.detail.get('non_field_errors', ''):
+                    non_field_errors = e.detail.get('non_field_errors')[0]
+                else:
+                    non_field_errors = e.detail
+            response = APIResponse(data={}, success=False, msg=non_field_errors if non_field_errors else '请求出错')
+            return response
         now = datetime.now()
         order_operation = OrderOperationRecord.objects.filter(order_sn=order_sn).order_by('-add_time')
         time_consuming = float(now.timestamp() - order_operation[0].add_time.timestamp())
@@ -1857,6 +1871,7 @@ class SupperUserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins
             """延期发货"""
             # due_time = self.request.data.get('due_time', '')
             remarks = self.request.data.get('remarks', '')
+            is_pass = safe_int(self.request.data.get('is_pass', 0))
             original_delivery_time = self.request.data.get('original_delivery_time', '')
             expect_date_of_delivery = self.request.data.get('expect_date_of_delivery', '')
             responsible_party = self.request.data.get('responsible_party', 0)
@@ -1872,20 +1887,33 @@ class SupperUserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins
             try:
                 abnormal_order = AbnormalOrder.objects.get(order_sn=order_sn, abnormal_type=2)
                 abnormal_order.is_deal = 2
+                if is_pass == 1:
+                    abnormal_order.is_pass = True
+                else:
+                    abnormal_order.is_pass = False
                 abnormal_order.remarks = remarks
                 abnormal_order.responsible_party = responsible_party
                 abnormal_order.original_delivery_time = original_delivery_time
                 abnormal_order.expect_date_of_delivery = expect_date_of_delivery
                 abnormal_order.save()
             except Exception as e:
-                AbnormalOrder.objects.create(order_sn=order_sn, abnormal_type=2, remarks=remarks, is_deal=2,
-                                             original_delivery_time=original_delivery_time,
-                                             responsible_party=responsible_party,
-                                             expect_date_of_delivery=expect_date_of_delivery)
+                if is_pass == 1:
+                    AbnormalOrder.objects.create(order_sn=order_sn, abnormal_type=2, remarks=remarks, is_deal=2,
+                                                 original_delivery_time=original_delivery_time,
+                                                 responsible_party=responsible_party, is_pass=True,
+                                                 expect_date_of_delivery=expect_date_of_delivery)
+                else:
+                    AbnormalOrder.objects.create(order_sn=order_sn, abnormal_type=2, remarks=remarks, is_deal=2,
+                                                 original_delivery_time=original_delivery_time,
+                                                 responsible_party=responsible_party, is_pass=False,
+                                                 expect_date_of_delivery=expect_date_of_delivery)
             expect_date_of_delivery = datetime.strptime(expect_date_of_delivery, '%Y-%m-%d')
             order_detail[0].due_time = expect_date_of_delivery + timedelta(days=order_detail[0].max_delivery_time)
             order_detail[0].due_desc = remarks
-            order_detail[0].status = 8
+            if is_pass == 1:
+                order_detail[0].status = 8
+            else:
+                order_detail[0].status = 3
             order_detail[0].save()
             response = APIResponse(success=True, data={}, msg='延期发货操作成功')
             return response
@@ -1940,6 +1968,7 @@ class SupperUserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins
         elif int(is_type) == 6:
             """无货"""
             remarks = self.request.data.get('remarks', '')
+            is_pass = safe_int(self.request.data.get('is_pass', 0))
             responsible_party = self.request.data.get('responsible_party', 0)
             order_detail = order_detail[0]
             now = datetime.now()
@@ -1955,13 +1984,24 @@ class SupperUserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins
             try:
                 abnormal_order = AbnormalOrder.objects.get(order_sn=order_sn, abnormal_type=1)
                 abnormal_order.is_deal = 2
+                if is_pass == 1:
+                    abnormal_order.is_pass = True
+                else:
+                    abnormal_order.is_pass = False
                 abnormal_order.responsible_party = responsible_party
                 abnormal_order.remarks = remarks
                 abnormal_order.save()
             except Exception as e:
-                AbnormalOrder.objects.create(order_sn=order_sn, abnormal_type=1, remarks=remarks, is_deal=2,
-                                             responsible_party=responsible_party)
-            order_detail.status = 13
+                if is_pass == 1:
+                    AbnormalOrder.objects.create(order_sn=order_sn, abnormal_type=1, remarks=remarks, is_deal=2,
+                                                 responsible_party=responsible_party, is_pass=True)
+                else:
+                    AbnormalOrder.objects.create(order_sn=order_sn, abnormal_type=1, remarks=remarks, is_deal=2,
+                                                 responsible_party=responsible_party)
+            if is_pass == 1:
+                order_detail.status = 13
+            else:
+                order_detail.status = 3
             order_detail.save()
 
             # 执行退款逻辑
@@ -2003,21 +2043,46 @@ class SupperUserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins
         elif int(is_type) == 8:
             """退货"""
             remarks = self.request.data.get('remarks', '')
+            is_pass = safe_int(self.request.data.get('is_pass', 0))
+            returns_sn = self.request.data.get('returns_sn', '')
+            if not returns_sn.startswith('TH'):
+                response = APIResponse(success=False, data={}, msg='退货单号有误')
+                return response
             try:
-                return_deal = ReturnsDeal.objects.get(order_sn=order_sn, return_type=1)
+                return_deal = ReturnsDeal.objects.get(order_sn=order_sn, return_type=1, return_sn=returns_sn)
                 return_deal.is_deal = 2
                 return_deal.save()
             except Exception:
                 ReturnsDeal.objects.create(order_sn=order_sn, is_deal=2, remarks=remarks)
+            try:
+                return_order = OrderReturns.objects.get(order_sn=order_sn, returns_sn=returns_sn)
+            except Exception:
+                return_order = OrderReturns.objects.create(order_sn=order_sn, returns_sn=returns_sn, status=3)
+            if is_pass == 1:
+                SuperUserOperation.objects.create(order_sn=order_sn, operator=user_id,
+                                                  original_status=order_detail[0].status, changed_status=11)
+                OrderOperationRecord.objects.create(order_sn=order_sn, status=13, operator=user_id,
+                                                    execution_detail='超级管理员[%s]执行订单[%s]同意退货操作' %
+                                                                     (user_id, order_sn),
+                                                    progress='同意退货', time_consuming=time_consuming)
+                order_detail[0].status = 11
+                order_detail[0].save()
+                return_order.status = 5
+                return_order.save()
+                response = APIResponse(success=True, data={}, msg='同意退货')
+                return response
             SuperUserOperation.objects.create(order_sn=order_sn, operator=user_id,
-                                              original_status=order_detail[0].status, changed_status=11)
+                                              original_status=order_detail[0].status, changed_status=6)
             OrderOperationRecord.objects.create(order_sn=order_sn, status=13, operator=user_id,
-                                                execution_detail='超级管理员[%s]执行订单[%s]同意退货操作' %
+                                                execution_detail='超级管理员[%s]执行订单[%s]拒绝退货操作' %
                                                                  (user_id, order_sn),
-                                                progress='同意退货', time_consuming=time_consuming)
-            order_detail[0].status = 11
+                                                progress='拒绝退货', time_consuming=time_consuming)
+            return_order.status = 4
+            return_order.save()
+            # 审核未通过重新拨回已完成未结束状态
+            order_detail[0].status = 6
             order_detail[0].save()
-            response = APIResponse(success=True, data={}, msg='同意退货')
+            response = APIResponse(success=True, data={}, msg='拒绝退货')
             return response
         else:
             response = APIResponse(success=False, data={}, msg='未定义动作')

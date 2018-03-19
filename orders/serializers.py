@@ -29,14 +29,14 @@ class ReceiptSerializer(serializers.ModelSerializer):
 
 
 class OpenReceiptSerializer(serializers.ModelSerializer):
-    images = serializers.CharField(label='URL', allow_null=True, allow_blank=True)
+    images = serializers.CharField(label='URL', allow_null=True, allow_blank=True, required=False)
 
     class Meta:
         model = OpenReceipt
         fields = ['receipt_sn', 'order_sn', 'images', 'remarks']
 
     def validate(self, attrs):
-        images = attrs['images']
+        images = attrs.get('images', '')
         order_sn = attrs['order_sn']
         # 去掉图片url中的域名部分
         regular = '^((http://)|(https://))?([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,6}(/)'
@@ -153,7 +153,7 @@ class ReturnsSerializer(serializers.ModelSerializer):
 class ReturnOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderReturns
-        fields = ['order_sn', 'receiver', 'mobile', 'address', 'logistics_company', 'logistics_number']
+        fields = ['order_sn', 'receiver', 'mobile', 'address', 'logistics_company', 'logistics_number', 'returns_sn']
 
 
 class UserOrderSerializer(serializers.ModelSerializer):
@@ -197,8 +197,9 @@ class OrderLogisticsSerializer(serializers.ModelSerializer):
     order_sn = serializers.CharField(max_length=17, label='订单号', required=True)
     logistics_company = serializers.CharField(label='物流公司')
     logistics_number = serializers.CharField(label='物流编号')
-    mobile = serializers.CharField(max_length=11, min_length=11, label='电话', allow_null=True, allow_blank=True)
-    sender = serializers.CharField(max_length=30, label='送货人', allow_null=True, allow_blank=True)
+    mobile = serializers.CharField(max_length=11, min_length=11, label='电话', allow_null=True, allow_blank=True,
+                                   required=False)
+    sender = serializers.CharField(max_length=30, label='送货人', allow_null=True, allow_blank=True, required=False)
 
     class Meta:
         model = OrderLogistics
@@ -283,9 +284,14 @@ class SupplierUpdateOrderSerializer(serializers.ModelSerializer):
 class SuperUserUpdateSerializer(serializers.Serializer):
     is_type = serializers.IntegerField(label='操作类型')
     order_sn = serializers.CharField(label='订单号')
-    original_delivery_time = serializers.DateField(label='原发货时间', allow_null=True, required=True)
-    expect_date_of_delivery = serializers.DateField(label='预计发货日', allow_null=True, required=True)
+    returns_sn = serializers.CharField(label='退货单号', allow_null=True, required=False)
+    original_delivery_time = serializers.DateField(label='原发货时间', allow_null=True, required=False)
+    expect_date_of_delivery = serializers.DateField(label='预计发货日', allow_null=True, required=False)
+    is_pass = serializers.IntegerField(label='是否通过', allow_null=True, required=False)
     remarks = serializers.CharField(label='备注', allow_null=True, required=True)
+
+    def validate(self, attrs):
+        return attrs
 
 
 class OrderFinanceSerializer(serializers.Serializer):

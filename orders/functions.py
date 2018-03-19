@@ -408,10 +408,10 @@ def get_son_order_detail(instance, guest_id):
     __dict = {}
     abnormal_delay_order = AbnormalOrder.objects.filter(order_sn=_instance.son_order_sn,
                                                         abnormal_type=2,
-                                                        is_deal=2)
+                                                        is_deal=2, is_pass=True)
     abnormal_no_order = AbnormalOrder.objects.filter(order_sn=_instance.son_order_sn,
                                                      abnormal_type=1,
-                                                     is_deal=2)
+                                                     is_deal=2, is_pass=True)
     if not abnormal_delay_order and _instance.status == 8:
         _status = '待接单'
     elif not abnormal_no_order and _instance.status == 13:
@@ -565,21 +565,35 @@ def returns_order(instance, status, guest_id, remarks):
         return response
     if status == 2:
         # 状态
-        now = datetime.now()
-        order_operation = OrderOperationRecord.objects.filter(order_sn=instance.son_order_sn).order_by('-add_time')
-        time_consuming = float(now.timestamp() - order_operation[0].add_time.timestamp())
-        OrderOperationRecord.objects.create(order_sn=instance.son_order_sn, status=12, operator=guest_id,
-                                            execution_detail='用户[%s]对订单[%s]执行申请退货操作' % (
-                                                guest_id, instance.son_order_sn), progress='已支付',
-                                            time_consuming=time_consuming)
+        # 获取退货单号逻辑
+        order_sn = instance.son_order_sn
+        headers = {'content-type': 'application/json',
+                   'user-agent': "User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.94 Safari/537.36"}
+        parameters = json.dumps({'order_sn': order_sn})
         try:
-            return_order = ReturnsDeal.objects.get(order_sn=instance.son_order_sn)
-            return_order.is_deal = 1
-            return_order.return_type = 1
-            return_order.remarks = remarks
-            return_order.save()
+            response = requests.post(ORDER_API_HOST + '/api/rejected', data=parameters, headers=headers)
+            response_dict = json.loads(response.text)
         except Exception as e:
-            ReturnsDeal.objects.create(order_sn=instance.son_order_sn, is_deal=1, remarks=remarks, return_type=1)
+            logger.info('ID生成器连接失败!!!')
+            response = APIResponse(success=False, data={}, msg='ID生成器连接失败!!!')
+            return response
+        logger.info(message='生成退货ID返回结果: %s' % response_dict)
+        if response_dict['rescode'] != '10000':
+            response = APIResponse(success=False, data={}, msg='ID生成器出错!!!')
+            return response
+        returns_sn = response_dict['data']['th_order_id']
+        now = datetime.now()
+        order_operation = OrderOperationRecord.objects.filter(order_sn=order_sn).order_by('-add_time')
+        time_consuming = float(now.timestamp() - order_operation[0].add_time.timestamp())
+        OrderOperationRecord.objects.create(order_sn=order_sn, status=12, operator=guest_id,
+                                            execution_detail='用户[%s]对订单[%s]执行申请退货操作' % (
+                                                guest_id, order_sn), progress='已支付',
+                                            time_consuming=time_consuming)
+        # 生成待审核退货单
+        OrderReturns.objects.create(order_sn=order_sn, returns_sn=returns_sn, status=3)
+        # 生成待审核后台数据
+        ReturnsDeal.objects.create(order_sn=instance.son_order_sn, is_deal=1, remarks=remarks, return_type=1,
+                                   return_sn=returns_sn)
         instance.status = 11
         instance.save()
         response = APIResponse(success=True, data={}, msg='退货申请提交成功等待审核')
@@ -659,7 +673,7 @@ def deal_supplier_operation(abnormal_type, order_sn, original_delivery_time,
         expect_date_of_delivery = datetime.strptime(expect_date_of_delivery, '%Y-%m-%d')
         original_delivery_time = (order_detail.add_time + timedelta(
             days=order_detail.max_delivery_time))
-        if expect_date_of_delivery < original_delivery_time:
+        if expect_date_of_delivery <= original_delivery_time:
             response = APIResponse(success=False, data={}, msg='传入的时间有误')
             return response
         order_detail.max_delivery_time = (expect_date_of_delivery - original_delivery_time).days
@@ -744,6 +758,15 @@ def superuser_get_order_detail(orders, son_id=None):
         __dict['pay_status'] = payment.pay_status
         __dict['pay_type'] = payment.pay_type
         __dict['operation'] = _result
+        return_info = {}
+        return_order = OrderReturns.objects.filter(order_sn=order_detail.son_order_sn).order_by('-add_time')
+        if return_order:
+            return_order = return_order[0]
+            return_info['returns_sn'] = return_order.returns_sn
+            return_info['status'] = return_order.status
+            return_deal = ReturnsDeal.objects.filter(return_sn=return_order.returns_sn)
+            return_info['is_deal'] = True if return_deal and return_deal[0].is_deal else False
+        __dict['return_info'] = return_info
         result.append(__dict)
     data['sub_order'] = result
     return data
@@ -752,10 +775,10 @@ def superuser_get_order_detail(orders, son_id=None):
 def deal_returns_order(order_details, returns_status, returns_sn, start_time='', end_time='', is_type=1):
     data = []
     order_returns = OrderReturns.objects.filter(order_sn__in=[obj.son_order_sn for obj in order_details])
-    returns_deal = ReturnsDeal.objects.filter(order_sn__in=[obj.son_order_sn for obj in order_details],
-                                              return_type=is_type).exclude(
-        order_sn__in=[obj.order_sn for obj in order_returns]
-    )
+    # returns_deal = ReturnsDeal.objects.filter(order_sn__in=[obj.son_order_sn for obj in order_details],
+    #                                           return_type=is_type).exclude(
+    #     order_sn__in=[obj.order_sn for obj in order_returns]
+    # )
     if is_type == 2:
         order_refund = OrderRefund.objects.filter(order_sn__in=[obj.son_order_sn for obj in order_details])
     if returns_sn:
@@ -768,57 +791,58 @@ def deal_returns_order(order_details, returns_status, returns_sn, start_time='',
     if end_time:
         end_time += ' 23:59:59'
         order_returns = order_returns.filter(add_time__lte=end_time)
-    if order_returns:
-        for order_return in order_returns:
-            result = {}
-            order_detail = order_details.filter(son_order_sn=order_return.order_sn)
-            if not order_detail:
-                response = APIResponse(success=False, data={})
-                return response
-            if not order_return:
-                response = APIResponse(success=False, data={}, msg='没有退货申请记录，请联系管理员')
-                return response
-            order_detail = order_detail[0]
-            result['id'] = order_detail.id
-            result['goods_name'] = order_detail.goods_name
-            result['goods_unit'] = order_detail.goods_unit
-            result['order_sn'] = order_detail.son_order_sn
-            result['subtotal_money'] = order_detail.subtotal_money
-            result['model'] = order_detail.model
-            result['brand'] = order_detail.brand
-            result['number'] = order_detail.number
-            result['univalent'] = order_detail.univalent
-            result['returns_sn'] = order_return.returns_sn
-            result['status'] = order_return.status
-            result['returns_time'] = order_return.add_time
-            if is_type == 2:
-                result['refund_time'] = order_refund[0].add_time if order_refund else ''
-                result['refund_sn'] = order_refund[0].refund_sn if order_refund else ''
-            data.append(result)
-    if returns_deal:
-        for _deal in returns_deal:
-            result = {}
-            order_detail = order_details.filter(son_order_sn=_deal.order_sn)
-            if not order_detail:
-                response = APIResponse(success=False, data={})
-                return response
-            order_detail = order_detail[0]
-            result['id'] = order_detail.id
-            result['goods_name'] = order_detail.goods_name
-            result['goods_unit'] = order_detail.goods_unit
-            result['order_sn'] = order_detail.son_order_sn
-            result['subtotal_money'] = order_detail.subtotal_money
-            result['model'] = order_detail.model
-            result['brand'] = order_detail.brand
-            result['number'] = order_detail.number
-            result['univalent'] = order_detail.univalent
-            result['returns_sn'] = ''
-            result['status'] = ''
-            result['returns_time'] = ''
-            if is_type == 2:
-                result['refund_time'] = ''
-                result['refund_sn'] = ''
-            data.append(result)
+    for order_return in order_returns:
+        result = {}
+        order_detail = order_details.filter(son_order_sn=order_return.order_sn)
+        returns_deal = ReturnsDeal.objects.filter(return_sn=order_return.returns_sn)
+        if not order_detail:
+            response = APIResponse(success=False, data={}, msg='退货信息异常')
+            return response
+        # if not order_return:
+        #     response = APIResponse(success=False, data={}, msg='没有退货申请记录，请联系管理员')
+        #     return response
+        order_detail = order_detail[0]
+        result['id'] = order_detail.id
+        result['goods_name'] = order_detail.goods_name
+        result['goods_unit'] = order_detail.goods_unit
+        result['order_sn'] = order_detail.son_order_sn
+        result['subtotal_money'] = order_detail.subtotal_money
+        result['model'] = order_detail.model
+        result['brand'] = order_detail.brand
+        result['number'] = order_detail.number
+        result['univalent'] = order_detail.univalent
+        result['returns_sn'] = order_return.returns_sn
+        result['is_deal'] = True if returns_deal and returns_deal[0].is_deal == 2 else False
+        result['status'] = order_return.status if is_type !=2 else order_refund[0].status
+        result['returns_time'] = int(order_return.add_time.timestamp())
+        if is_type == 2:
+            result['refund_time'] = int(order_refund[0].add_time.timestamp()) if order_refund else ''
+            result['refund_sn'] = order_refund[0].refund_sn if order_refund else ''
+        data.append(result)
+    # if returns_deal:
+    #     for _deal in returns_deal:
+    #         result = {}
+    #         order_detail = order_details.filter(son_order_sn=_deal.order_sn)
+    #         if not order_detail:
+    #             response = APIResponse(success=False, data={})
+    #             return response
+    #         order_detail = order_detail[0]
+    #         result['id'] = order_detail.id
+    #         result['goods_name'] = order_detail.goods_name
+    #         result['goods_unit'] = order_detail.goods_unit
+    #         result['order_sn'] = order_detail.son_order_sn
+    #         result['subtotal_money'] = order_detail.subtotal_money
+    #         result['model'] = order_detail.model
+    #         result['brand'] = order_detail.brand
+    #         result['number'] = order_detail.number
+    #         result['univalent'] = order_detail.univalent
+    #         result['returns_sn'] = ''
+    #         result['status'] = ''
+    #         result['returns_time'] = ''
+    #         if is_type == 2:
+    #             result['refund_time'] = ''
+    #             result['refund_sn'] = ''
+    #         data.append(result)
     msg = '全部退货单' if is_type == 1 else '全部退款单'
     response = APIResponse(success=True, data=data, msg=msg)
     return response
@@ -933,7 +957,7 @@ def returns_detail(order_detail, data):
     data['return_info'] = return_info
     data['return_logistics'] = return_logistics
     operation_record = []
-    for operation in OrderOperationRecord.objects.filter(status__in=[12, 13]):
+    for operation in OrderOperationRecord.objects.filter(status__in=[12, 13], order_sn=order_detail.son_order_sn):
         _op = {}
         _op['order_sn'] = operation.order_sn
         _op['status'] = operation.status
@@ -960,7 +984,7 @@ def refund_detail(order_detail, data):
         refund_info['freight'] = 0.0
         refund_info['add_time'] = int(order_refund.add_time.timestamp())
     operation_record = []
-    for operation in OrderOperationRecord.objects.filter(status__in=[11, 12, 13, 14]):
+    for operation in OrderOperationRecord.objects.filter(status__in=[11, 12, 13, 14], order_sn=order_detail.son_order_sn):
         _op = {}
         _op['order_sn'] = operation.order_sn
         _op['status'] = operation.status
@@ -970,5 +994,6 @@ def refund_detail(order_detail, data):
         _op['add_time'] = int(operation.add_time.timestamp())
         operation_record.append(_op)
     data['refund_info'] = refund_info
+    data['operation_record'] = operation_record
     response = APIResponse(success=True, data=data, msg='退款单详情')
     return response
