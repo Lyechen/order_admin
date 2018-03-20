@@ -2,8 +2,8 @@ from django.views.decorators.csrf import csrf_exempt
 
 from functools import wraps
 
-from utils.http import APIResponse, http_response
-from auth import get_user
+from src.utils.http import APIResponse, http_response
+from src.auth import get_user
 
 
 def token_required(view_func):

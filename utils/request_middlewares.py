@@ -1,11 +1,8 @@
 # coding=utf-8
-import sys
-from django.conf import settings
 from django.dispatch import Signal
 from django.utils.deprecation import MiddlewareMixin
-from django.views.debug import technical_500_response
 
-from utils.log import logger
+from src.utils.log import logger
 
 
 

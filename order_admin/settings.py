@@ -97,7 +97,7 @@ CORS_ORIGIN_ALLOW_ALL = True
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'templates')]
+        'DIRS': [os.path.join(BASE_DIR, '../../templates')]
         ,
         'APP_DIRS': True,
         'OPTIONS': {
@@ -171,7 +171,7 @@ REST_FRAMEWORK = {
 STATIC_URL = '/static/'
 
 # 日志器的配置
-LOGGING_DIR = os.path.join(BASE_DIR, 'logs')
+LOGGING_DIR = os.path.join(BASE_DIR, '../../logs')
 if RUN_MODE == "DEVELOP":
     LOG_LEVEL = LOG_LEVEL_DEVELOP
     LOG_CLASS = 'logging.handlers.RotatingFileHandler'

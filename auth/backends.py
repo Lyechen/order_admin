@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
-from auth import get_user
+from src.auth import get_user
 
 
 class TokenBackend:

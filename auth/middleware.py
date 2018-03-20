@@ -2,7 +2,7 @@ from django.conf import settings
 from django.utils.deprecation import MiddlewareMixin
 from django.utils.functional import SimpleLazyObject
 
-import auth
+from src import auth
 
 
 def get_user(request):

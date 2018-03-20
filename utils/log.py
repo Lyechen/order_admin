@@ -66,7 +66,7 @@ class logger_traceback:
         """
         try:
             info = sys.exc_info()
-            from utils.request_middlewares import get_x_request_id
+            from src.utils.request_middlewares import get_x_request_id
             requestID = get_x_request_id(True)
             if requestID:
                 message = u"%s【requestID:%s】" % (message, requestID)

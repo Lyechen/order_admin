@@ -4,28 +4,15 @@ __author__ = 'jiangchao'
 import re
 import json
 import requests
-import time
 
-from rest_framework import mixins
-from rest_framework import viewsets
-from rest_framework import status
-from rest_framework.response import Response
-from django.db.models import Q
 from datetime import datetime, timedelta
-from django.forms.models import model_to_dict
 
-from .serializers import OrderSerializer, OrderDetailSerializer, OrderCancelSerializer, OrderPaymentSerializer
-from .serializers import UserOrderSerializer, OrderDelaySerializer, AdminOrderCancelSerializer
-from .serializers import SupplierOrderAdminSerializer, OrderLogisticsSerializer, ReceiptSerializer
-from .serializers import OpenReceiptSerializer, AbnormalOrderSerializer, ChiefUpdateOrderSerializer
-from .serializers import SupplierUpdateOrderSerializer, SuperUserUpdateSerializer
-from .models import Order, Receipt, OrderDetail, OrderLogistics, OrderOperationRecord, OrderPayment, OrderCancel
-from .models import OpenReceipt, AbnormalOrder, SuperUserOperation, ReturnsDeal, OrderReturns, OrderRefund
+from .models import Order, Receipt, OrderDetail, OrderOperationRecord, OrderPayment
+from .models import AbnormalOrder, ReturnsDeal, OrderReturns, OrderRefund
 from order_admin.settings import ORDER_API_HOST, GOODS_API_HOST, SUPPLIER_API_HOST
 from utils.log import logger
 from utils.string_extension import safe_int
-from utils.http import APIResponse, CONTENT_RANGE, CONTENT_TOTAL, get_limit
-from order_admin.settings import CDN_HOST
+from utils.http import APIResponse
 
 RECEIPT_TYPE = {
     1: "普通发票",
@@ -117,7 +104,7 @@ IS_TYPE = {
 }
 
 
-def online_generation_order(data):
+def online_generation_order(data, request):
     data = re.sub('\'', '\"', data)
     now = datetime.now()
     date = now.date()
@@ -136,12 +123,19 @@ def online_generation_order(data):
         receiver = data['receiver']
         # 电话
         mobile = data['mobile']
-        # 收货地址
+        # 省
+        province = data['province']
+        # 市
+        city = data['city']
+        # 区
+        district = data['district']
+        # 详细地址
         address = data['address']
         # 备注
         remarks = data['remarks']
         # 买家ID
-        guest_id = data['guest_id']
+        guest_id = request.user.id
+        # guest_id = 2
         # 这里后续需要加上获取佣金比例的逻辑 暂时先用 0.0 替代
         ratio = 0.0
         order_status = 1
@@ -222,7 +216,8 @@ def online_generation_order(data):
             )
         # 创建母订单信息, 母订单类型订单不存在母订单
         mother_order = Order.objects.create(receipt=receipt.id, remarks=remarks, receiver=receiver, mobile=mobile,
-                                            guest_id=guest_id, order_sn=mother_order_sn, address=address)
+                                            guest_id=guest_id, order_sn=mother_order_sn, address=address,
+                                            province=province, city=city, district=district)
         # 增加母订单状态信息
         OrderOperationRecord.objects.create(order_sn=mother_order.order_sn, status=1, operator=guest_id,
                                             execution_detail='提交订单', progress='未支付')

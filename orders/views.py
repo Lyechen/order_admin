@@ -23,7 +23,7 @@ from .functions import generation_order, get_mother_order_detail, get_son_order_
 from .functions import payment_order, get_chief_order, deal_supplier_operation, supplier_confirm_order, filter_base
 from .functions import superuser_get_order_detail, returns_order, deal_returns_order, user_confirm_order
 from .functions import refund_detail, returns_detail, online_generation_order
-from auth.authentication import UserAuthentication, AdminUserAuthentication, SupplierAuthentication
+from auth.authentication import SupplierAuthentication, UserAuthentication
 
 # Create your views here.
 
@@ -125,7 +125,7 @@ class OrderViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.Up
                    mixins.DestroyModelMixin, viewsets.GenericViewSet):
     # serializer_class = OrderSerializer
     queryset = Order.objects.all()
-    authentication_classes = []
+    authentication_classes = [UserAuthentication]
 
     def create(self, request, *args, **kwargs):
         # serializer = self.get_serializer(data=request.data)
@@ -136,12 +136,11 @@ class OrderViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.Up
         if not data:
             response = APIResponse(success=False, data={}, msg='参数异常')
             return response
-        is_product = request.query_params.get('is_product', 0)
-        if is_product:
-            response = online_generation_order(data)
-            return response
-        response = generation_order(data)
+        # is_product = request.query_params.get('is_product', 0)
+        response = online_generation_order(data, request)
         return response
+        # response = generation_order(data)
+        # return response
         # data = re.sub('\'', '\"', request.data['data'])
         # now = datetime.now()
         # date = now.date()
@@ -348,7 +347,7 @@ class OrderViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.Up
         limit = safe_int(request.query_params.get('limit', 15))
         # page_num = request.query_params.get('page_num', 1)
         # page_size = request.query_params.get('page_size', 10)
-        guest_id = self.request.query_params.get('guest_id', 0)
+        guest_id = request.user.id
         # 0: 全部订单  1: 待付款  2: 待收货 3: 售后
         is_type = int(self.request.query_params.get('is_type', 0))
         start_time = self.request.query_params.get('start_time', '')
@@ -444,7 +443,7 @@ class OrderViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.Up
         return response
 
     def update(self, request, *args, **kwargs):
-        guest_id = self.request.query_params.get('guest_id', 0)
+        guest_id = request.user.id
         status = safe_int(self.request.data.get('status', 0))
         remarks = self.request.data.get('remarks', '')
         if not guest_id:

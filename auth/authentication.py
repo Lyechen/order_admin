@@ -6,7 +6,7 @@ from __future__ import unicode_literals
 from rest_framework import exceptions
 
 from auth import get_user
-from utils.response import ResCode, res
+from utils.response import ResCode
 
 
 class BaseAuthentication(object):
